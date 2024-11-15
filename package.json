@@ -1,0 +1,8 @@
+{
+  "private": true,
+  "name": "nuwa.sui",
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ]
+}
