@@ -25,6 +25,7 @@ export type MoveResourceType = {
     type: 'primitive' | 'imported' | 'imported-module' | 'unknown',
     target: string // u8, std::vec::Vec, T, etc.
 } | {
+    unique: boolean,
     type: 'struct'
     public: boolean
     target: string
@@ -68,10 +69,14 @@ export type MoveEnumFieldType = {
     fields: MoveResourceRefType[]
 }
 
-export type MoveFunctionModifiers = 'native' | 'public' | 'entry' | 'macro'
+export type MoveAttributeType = {
+    [key: string]: true | string | MoveAttributeType
+}
+
+export type MoveFunctionModifiers = 'native' | 'public' | 'entry' | 'macro' | 'public(friend)'
 
 export type MoveFunctionType = {
-    name: string,
+    target: string,
     modifiers: MoveFunctionModifiers[],
     generics: MoveGenericType[],
     params: {
@@ -85,6 +90,10 @@ export type ParsedModule = {
     //     [key: string]: MoveResourceType
     // },
     // built-in resources
+    packageName: string,
+    moduleName: string,
+    test: boolean,
+    
     resources: {
         [key: string]: MoveResourceType
     },

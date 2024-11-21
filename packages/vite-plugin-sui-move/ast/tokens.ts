@@ -18,12 +18,8 @@ export const WhiteSpace = createToken({
     group: Lexer.SKIPPED,
 })
 
-export const MoveAttribute = createToken({
-    name: 'MoveAttribute',
-    pattern: /#!?\[.*]/,
-    group: Lexer.SKIPPED,
-    line_breaks: true
-})
+// 包括 Identifier, 可以用作变量名的关键字或者符号
+export const Literal = createToken({name: 'Literal', pattern: Lexer.NA})
 
 // Operations
 export const Operations = createToken({name: 'Operation', pattern: Lexer.NA})
@@ -58,9 +54,12 @@ export const CloseCurly = createToken({name: 'CloseCurly', pattern: /}/})
 export const Comma = createToken({name: 'Comma', pattern: /,/})
 export const Dollar = createToken({name: 'Dollar', pattern: /\$/})
 export const Dot = createToken({name: 'Dot', pattern: /\./})
+export const Sharp = createToken({name: 'Sharp', pattern: /#/})
+export const LeftBracket = createToken({name: 'LeftBracket', pattern: /\[/})
+export const RightBracket = createToken({name: 'RightBracket', pattern: /]/})
+// export const Quote = createToken({name: 'Quote', pattern: /"/})
+// export const SingleQuote = createToken({name: 'SingleQuote', pattern: /'/})
 
-// 包括 Identifier, 可以用作变量名的关键字
-export const Literal = createToken({name: 'Literal', pattern: Lexer.NA})
 // export const Vector = createToken({name: 'Vector', pattern: /vector/, categories: [Literal]})
 
 // 变量声明关键字
@@ -85,10 +84,13 @@ export const Assert = createToken({name: 'Assert', pattern: /\bassert!/, categor
 export const As = createToken({name: 'As', pattern: /\bas\b/})
 export const Use = createToken({name: 'Use', pattern: /\buse\b/})
 export const FunctionModifiers = createToken({name: 'FunctionModifiers', pattern: Lexer.NA})
-export const Macro = createToken({name: 'Macro', pattern: /\bmacro\b/, categories: [FunctionModifiers]})
+export const PublicWithParam = createToken({name: 'PublicWithParam', pattern: Lexer.NA, categories: [FunctionModifiers]})
+export const Macro = createToken({name: 'Macro', pattern: /\bmacro\b/, categories: [FunctionModifiers, Literal]})
 export const Native = createToken({name: 'Native', pattern: /\bnative\b/, categories: [FunctionModifiers]})
-export const Public = createToken({name: 'Public', pattern: /\bpublic\b/, categories: [FunctionModifiers]})
-export const Entry = createToken({name: 'Entry', pattern: /\bentry\b/, categories: [FunctionModifiers]})
+export const PublicFriend = createToken({name: 'PublicFriend', pattern: /\bpublic\(friend\)/, categories: [FunctionModifiers, PublicWithParam]})
+export const PublicPackage = createToken({name: 'PublicPackage', pattern: /\bpublic\(package\)/, categories: [FunctionModifiers, PublicWithParam]})
+export const Public = createToken({name: 'Public', pattern: /\bpublic\b/, categories: [FunctionModifiers, PublicWithParam]})
+export const Entry = createToken({name: 'Entry', pattern: /\bentry\b/, categories: [FunctionModifiers, Literal]})
 
 export const Fun = createToken({name: 'Function', pattern: /\bfun\b/})
 export const Module = createToken({name: 'Module', pattern: /\bmodule\b/, categories: [Literal]})
@@ -107,17 +109,23 @@ export const Phantom = createToken({name: 'Phantom', pattern: /\bphantom\b/, cat
 export const LiteralValue = createToken({name: 'LiteralValue', pattern: Lexer.NA})
 export const LiteralAddress = createToken({name: 'Address', pattern: /@[0-9a-zA-Z\w]+\b/, categories: [LiteralValue]})
 export const LiteralIntegers = createToken({name: 'Integers', pattern: /\b\d[\d_]*(u256|u128|u64|u32|u16|u8)?\b/, categories: [LiteralValue]})
+export const LiteralString = createToken({name: 'String', pattern: /b?"[^"]*"/, categories: [LiteralValue]})
 
+export const Identifier = createToken({name: 'Identifier', pattern: /\b[a-zA-Z_]\w*\b|`[a-zA-Z_]\w*`|\b_\b/, categories: [Literal]})
 
-export const Identifier = createToken({name: 'Identifier', pattern: /\b_?[a-zA-Z]\w*\b/, categories: [Literal]})
-
-export const Others = createToken({name: 'Others', pattern: /[^;{}=]+\b/})
+export const Others = createToken({name: 'Others', pattern: /./})
 
 export let allTokens = [
     Comment,
     BlockComment,
+    
+    LiteralValue,
+    LiteralAddress,
+    LiteralIntegers,
+    LiteralString,
+    
     WhiteSpace,
-    MoveAttribute,
+    // MoveAttribute,
     
     // 标点符号
     DoubleColon,
@@ -147,6 +155,11 @@ export let allTokens = [
     Xor,
     Operations,
     Dot,
+    Sharp,
+    LeftBracket,
+    RightBracket,
+    // Quote,
+    // SingleQuote,
     
     // move keywords
     Mut,
@@ -173,6 +186,8 @@ export let allTokens = [
     FunctionModifiers,
     Macro,
     Native,
+    PublicFriend,
+    PublicPackage,
     Public,
     Entry,
     Fun,
@@ -183,10 +198,6 @@ export let allTokens = [
     Copy,
     Drop,
     Phantom,
-    
-    LiteralValue,
-    LiteralAddress,
-    LiteralIntegers,
     
     // Identifier must appear after the keywords
     Identifier,

@@ -1,6 +1,61 @@
-import type {AsAlias, ContextEnvironment, MoveResourceType} from './types.ts'
+import type {
+    AsAlias,
+    ContextEnvironment,
+    MoveAttributeType,
+    MoveFunctionType,
+    MoveResourceType,
+    ParsedModule
+} from './types.ts'
 
 const PrimitiveTypes = ['u8', 'u16', 'u32', 'u64', 'u128', 'u256', 'bool', 'address', 'vector']
+
+// https://docs.sui.io/guides/developer/advanced/move-2024-migration#nested-use-and-standard-library-defaults
+const AutoImported: {
+    [name: string]: MoveResourceType
+} = {
+    // std::vector;
+    vector: {
+        type: 'imported-module',
+        target: 'std::vector'
+    },
+    // std::option::{Self, Option};
+    option: {
+        type: 'imported-module',
+        target: 'std::option'
+    },
+    Option: {
+        type: 'imported',
+        target: 'std::option::Option'
+    },
+    // sui::object::{Self, ID, UID};
+    object: {
+        type: 'imported-module',
+        target: 'sui::object'
+    },
+    ID: {
+        type: 'imported',
+        target: 'sui::object::ID'
+    },
+    UID: {
+        type: 'imported',
+        target: 'sui::object::UID'
+    },
+    // sui::transfer;
+    transfer: {
+        type: 'imported-module',
+        target: 'sui::transfer'
+    },
+    // sui::tx_context::{Self, TxContext};
+    tx_context: {
+        type: 'imported-module',
+        target: 'sui::tx_context'
+    },
+    TxContext: {
+        type: 'imported',
+        target: 'sui::tx_context::TxContext'
+    },
+}
+
 
 /*
 * 用于记录上下文，用于 module，code-block，struct，enum 等环境
@@ -10,9 +65,11 @@ export class Context {
     readonly resources: {
         [key: string]: MoveResourceType
     }
+    readonly functions: ParsedModule["functions"]
     readonly builtInResources: {
         [key: string]: MoveResourceType
     }
+    private unCostAttributes: MoveAttributeType
     
     readonly environment: ContextEnvironment
     readonly info: {
@@ -36,6 +93,7 @@ export class Context {
         
         this.info = {} as any
         this.environment = opts.environment ?? 'module'
+        this.unCostAttributes = {}
         
         if (opts.upper) {
             this.upper = opts.upper
@@ -43,6 +101,7 @@ export class Context {
             this.info.packageName = opts.upper.info.packageName
             this.resources = JSON.parse(JSON.stringify(this.upper.resources))
             this.builtInResources = this.upper.builtInResources
+            this.functions = this.upper.functions
         } else {
             // root-level context
             this.upper = null
@@ -50,14 +109,17 @@ export class Context {
             this.info.moduleName = opts.moduleName ?? 'UnknownModule'
             this.resources = opts.resources ?? {}
             this.builtInResources = {}
+            this.functions = {}
             
             // built-in resources
-            // for (let name of PrimitiveTypes) {
-            //     this.resources[name] = {
-            //         type: 'primitive',
-            //         target: name
-            //     }
-            // }
+            for (let name of PrimitiveTypes) {
+                this.resources[name] = {
+                    type: 'primitive',
+                    target: name
+                }
+            }
+            
+            Object.assign(this.resources, JSON.parse(JSON.stringify(AutoImported)))
         }
         
         
@@ -66,6 +128,16 @@ export class Context {
         } else {
             this.info.repr = `${this.upper!.info.repr}::${opts.name}`
         }
+    }
+    
+    public registerAttribute(attribute: MoveAttributeType) {
+        Object.assign(this.unCostAttributes, attribute)
+    }
+    
+    public consumeAttributes(): MoveAttributeType {
+        const attribute = this.unCostAttributes
+        this.unCostAttributes = {}
+        return attribute
     }
     
     public registerResource(name: string, resource: MoveResourceType) {
@@ -118,6 +190,10 @@ export class Context {
                 })
             }
         }
+    }
+    
+    public registerFunction(name: string, func: MoveFunctionType) {
+        this.functions[name] = func
     }
     
     // 传入资源标识符，返回资源的类型，如果 global 内没有找到，则认为是未知类型

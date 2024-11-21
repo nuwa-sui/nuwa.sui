@@ -1,45 +1,52 @@
-import {EmbeddedActionsParser, type IToken, EOF} from 'chevrotain'
+import {EmbeddedActionsParser, type IToken} from 'chevrotain'
 import {
     allTokens as tokens,
-    As,
-    Use,
-    Identifier,
-    DoubleColon,
-    Semicolon,
-    OpenCurly,
-    CloseCurly,
-    Comma,
-    Module,
-    LessThan,
-    GreaterThan,
-    Copy,
-    Drop,
-    Key,
-    Plus,
-    Store,
-    MoveAbilities,
-    Comment,
-    Colon,
-    Literal,
     And,
-    Mut,
-    Struct,
-    Public,
-    Has,
-    Phantom,
+    As,
+    Bang,
+    CloseCurly,
+    CloseParen,
+    Colon,
+    Comma,
+    Const,
+    DoubleColon,
     Enum,
+    Equal,
+    Fun,
+    FunctionModifiers,
+    GreaterThan,
+    Has,
+    LeftBracket,
+    LessThan,
+    Let,
+    Literal, LiteralString,
+    Module,
+    MoveAbilities,
+    Mut,
+    OpenCurly,
     OpenParen,
-    CloseParen, Entry, Fun, FunctionModifiers, Let, Const, Equal, Others
+    Phantom,
+    Plus,
+    Public,
+    RightBracket,
+    Semicolon,
+    Sharp,
+    Struct,
+    Use, PublicWithParam,
 } from "./tokens"
 import {Context} from './context'
 import type {
     AsAlias,
-    MoveBorrowType,
-    MoveGenericType,
     MoveAbilitiesType,
+    MoveAttributeType,
+    MoveBorrowType,
+    MoveFunctionModifiers,
+    MoveFunctionType,
+    MoveGenericType,
     MoveResourceRefType,
     MoveResourceType,
-    ParsedModule, MoveStructFieldsType, MoveFunctionType, MoveFunctionModifiers
+    MoveStructFieldsType,
+    ParsedModule
 } from './types'
 
 export class MoveParser extends EmbeddedActionsParser {
@@ -49,44 +56,6 @@ export class MoveParser extends EmbeddedActionsParser {
         this.input = input
     }
     
-    parseModule = this.RULE('parseModule', () => {
-        // module package::module {}?;
-        // module package::module; ...
-        let parsedModule: ParsedModule = {
-            functions: {},
-            resources: {}
-        }
-        
-        this.CONSUME(Module)
-        const packageName = this.CONSUME(Identifier).image
-        this.CONSUME(DoubleColon)
-        const moduleName = this.CONSUME1(Identifier).image
-        
-        const context = new Context({
-            packageName,
-            moduleName
-        })
-        
-        this.OR([{
-            GATE: () => this.LA(1).tokenType === OpenCurly,
-            ALT: () => {
-                this.CONSUME(OpenCurly)
-                parsedModule = this.SUBRULE(this.parseModuleBody, {ARGS: [context]})
-                this.CONSUME(CloseCurly)
-                this.OPTION(() => {
-                    this.CONSUME1(Semicolon)
-                })
-            }
-        }, {
-            GATE: () => this.LA(1).tokenType === Semicolon,
-            ALT: () => {
-                this.CONSUME(Semicolon)
-                parsedModule = this.SUBRULE1(this.parseModuleBody, {ARGS: [context]})
-            }
-        }])
-        
-        return parsedModule
-    })
     
     // 检查是否有指向 unknown 的资源引用，尝试在 builtInResources 中查找
     private fixResourceReference(parsed: ParsedModule, context: Context) {
@@ -114,64 +83,162 @@ export class MoveParser extends EmbeddedActionsParser {
         
     }
     
-    parseModuleBody = this.RULE('parseModuleBody', (context: Context): ParsedModule => {
+    // 如果 attributes 中包含 test_only 或者 test，则返回一个新的 context，不会影响原有 context
+    private newContextIfTestOnly(context: Context): [Context, MoveAttributeType] {
+        const attributes = context.consumeAttributes()
+        
+        if ('test_only' in attributes || 'test' in attributes) {
+            // test only
+            return [new Context(), attributes]
+        }
+        
+        return [context, attributes]
+    }
+    
+    // 解析模块, 返回 ParsedModule
+    parseModule = this.RULE('parseModule', (): ParsedModule => {
+        // module package::module {}?;
+        // module package::module; ...
+        
+        const parsedModule: ParsedModule = {
+            packageName: 'Unknown',
+            moduleName: 'Unknown',
+            test: false,
+            functions: {},
+            resources: {}
+        }
+        
+        
+        this.MANY(() => {
+            const tempContext = new Context()
+            this.SUBRULE(this.parseMoveAttribute, {ARGS: [tempContext]})
+            
+            const attributes = tempContext.consumeAttributes()
+            
+            if ('test_only' in attributes || 'test' in attributes) {
+                // test module，skip
+                parsedModule.test = true
+            }
+        })
+        
+        this.CONSUME(Module)
+        const packageName = this.CONSUME(Literal).image
+        parsedModule.packageName = packageName
+        this.CONSUME(DoubleColon)
+        const moduleName = this.CONSUME1(Literal).image
+        parsedModule.moduleName = moduleName
+        
+        
+        let context = new Context({
+            packageName,
+            moduleName
+        })
+        
+        this.OR([{
+            GATE: () => this.LA(1).tokenType === OpenCurly,
+            ALT: () => {
+                this.CONSUME(OpenCurly)
+                this.SUBRULE(this.parseModuleBody, {ARGS: [context]})
+                this.CONSUME(CloseCurly)
+                this.OPTION(() => {
+                    this.CONSUME1(Semicolon)
+                })
+            }
+        }, {
+            GATE: () => this.LA(1).tokenType === Semicolon,
+            ALT: () => {
+                this.CONSUME(Semicolon)
+                this.SUBRULE1(this.parseModuleBody, {ARGS: [context]})
+            }
+        }])
+        
+        // this.fixResourceReference()
+        parsedModule.resources = context.builtInResources
+        parsedModule.functions = context.functions
+        return parsedModule
+    })
+    
+    parseModuleBody = this.RULE('parseModuleBody', (context_: Context) => {
         // uses
         // consts
         // resources
         // functions
-        !context && (context = new Context())
-        
-        const parsedModule: ParsedModule = {
-            resources: {},
-            functions: {}
-        }
+        !context_ && (context_ = new Context())
         
         this.MANY(() => {
             this.OR([
                 {
                     GATE: () => this.LA(1).tokenType === Use || this.LA(2).tokenType === Use,
                     ALT: () => {
-                        this.SUBRULE(this.parseUse, {ARGS: [context]})
+                        context_.consumeAttributes()
+                        this.SUBRULE(this.parseUse, {ARGS: [context_]})
                         !this.RECORDING_PHASE && console.log('parseUse')
                     }
                 }, {
                     ALT: () => {
-                        this.SUBRULE(this.parseStruct, {ARGS: [context]})
-                        !this.RECORDING_PHASE && console.log('parseStruct')
+                        let [context, attributes] = this.newContextIfTestOnly(context_)
+                        const rst = this.SUBRULE(this.parseStruct, {ARGS: [context]})
+                        
+                        this.ACTION(() => {
+                            const [name, struct] = rst
+                            if (
+                                attributes.ext
+                                && typeof attributes.ext === 'object'
+                                && 'unique_object' in attributes.ext
+                                && struct.type === 'struct'
+                            ) {
+                                struct.unique = true
+                            }
+                            context.registerBuiltInResource(name, struct)
+                            !this.RECORDING_PHASE && console.log('parseStruct', name)
+                        })
                     }
                 }, {
                     ALT: () => {
-                        this.SUBRULE(this.parseEnum, {ARGS: [context]})
-                        !this.RECORDING_PHASE && console.log('parseEnum')
+                        let [context] = this.newContextIfTestOnly(context_)
+                        const rst = this.SUBRULE(this.parseEnum, {ARGS: [context]})
+                        
+                        this.ACTION(() => {
+                            const [name, enum_] = rst
+                            context.registerBuiltInResource(name, enum_)
+                            
+                            !this.RECORDING_PHASE && console.log('parseEnum', name)
+                        })
                     }
                 }, {
                     ALT: () => {
+                        context_.consumeAttributes()
                         this.SUBRULE(this.parseVarDeclaration)
+                        
                         !this.RECORDING_PHASE && console.log('parseVarDeclaration')
                     }
                 }, {
                     ALT: () => {
-                        const function_ = this.SUBRULE(this.parseFunction, {ARGS: [context]})
-                        if (function_) {
-                            parsedModule.functions[function_.name] = function_
-                        }
-                        !this.RECORDING_PHASE && console.log('parseFunction')
+                        const [context] = this.newContextIfTestOnly(context_)
+                        
+                        const rst = this.SUBRULE(this.parseFunction, {ARGS: [context]})
+                        
+                        this.ACTION(() => {
+                            if (rst) {
+                                const [name, function_] = rst
+                                context.registerFunction(name, function_)
+                                !this.RECORDING_PHASE && console.log('parseFunction', name)
+                            }
+                        })
+                    }
+                }, {
+                    GATE: () => this.LA(1).tokenType === Sharp,
+                    ALT: () => {
+                        this.SUBRULE(this.parseMoveAttribute, {ARGS: [context_]})
+                        !this.RECORDING_PHASE && console.log('parseMoveAttribute')
                     }
                 }
             ])
         })
-        
-        !this.RECORDING_PHASE && (parsedModule.resources = context.builtInResources)
-        
-        return parsedModule
     })
     
     // 解析变量声明 let, const，目前跳过，不解析
-    parseVarDeclaration = this.RULE('parseVarDeclaration', (context: Context) => {
-        !context && (context = new Context())
-        // let a: u8 = 1;
-        // let mut b: u8 = 2;
-        // let c = 3;
+    parseVarDeclaration = this.RULE('parseVarDeclaration', () => {
         
         this.OR([{
             ALT: () => {
@@ -238,7 +305,7 @@ export class MoveParser extends EmbeddedActionsParser {
                     })
                     
                     const generic: MoveGenericType = {
-                        name: this.CONSUME(Identifier).image,
+                        name: this.CONSUME(Literal).image,
                         abilities: [],
                         phantom
                     }
@@ -391,10 +458,13 @@ export class MoveParser extends EmbeddedActionsParser {
         this.MANY({
             // GATE: () => this.LA(1).tokenType !== CloseCurly,
             DEF: () => {
+                this.OPTION(() => {
+                    this.CONSUME(Mut)
+                })
                 const fieldName = this.CONSUME(Literal).image
                 this.CONSUME(Colon)
                 fields[fieldName] = this.SUBRULE(this.parseFieldRef, {ARGS: [context]})
-                this.OPTION(() => {
+                this.OPTION1(() => {
                     this.CONSUME(Comma)
                 })
             }
@@ -403,20 +473,21 @@ export class MoveParser extends EmbeddedActionsParser {
         return fields
     })
     
-    parseStruct = this.RULE('parseStruct', (context: Context) => {
+    parseStruct = this.RULE('parseStruct', (context: Context): [string, MoveResourceType] => {
         !context && (context = new Context())
         
         let isPublic = false
         this.OPTION(() => {
-            this.CONSUME(Public)
+            this.CONSUME(PublicWithParam)
             isPublic = true
         })
         
         this.CONSUME(Struct)
         
-        const structName = this.CONSUME(Identifier).image
+        const structName = this.CONSUME(Literal).image
         const struct: MoveResourceType = {
             type: 'struct',
+            unique: false,
             public: isPublic,
             target: `${context.info.packageName}::${context.info.moduleName}::${structName}`,
             generics: [],
@@ -439,20 +510,39 @@ export class MoveParser extends EmbeddedActionsParser {
             }
         }
         
+        let isEmptyStruct = false
+        this.OPTION1(() => {
+            // empty struct
+            this.CONSUME(OpenParen)
+            let idx = 0
+            this.MANY(() => {
+                struct.fields[idx.toString()] = this.SUBRULE(this.parseFieldRef, {ARGS: [newContext]})
+                idx ++
+            })
+            this.CONSUME(CloseParen)
+            isEmptyStruct = true
+        })
+        
         
         struct.abilities = this.SUBRULE(this.parseAbility)
-        this.CONSUME(OpenCurly)
-        // parseFields
         
-        struct.fields = this.SUBRULE(this.parseStructFields, {ARGS: [newContext]})
+        if (!isEmptyStruct) {
+            this.CONSUME(OpenCurly)
+            // parseFields
+            
+            struct.fields = this.SUBRULE(this.parseStructFields, {ARGS: [newContext]})
+            
+            this.CONSUME(CloseCurly)
+        } else {
+            this.CONSUME(Semicolon)
+        }
         
-        this.CONSUME(CloseCurly)
         
-        context.registerBuiltInResource(structName, struct)
-        return struct
+        // context.registerBuiltInResource(structName, struct)
+        return [structName, struct]
     })
     
-    parseEnum = this.RULE('parseEnum', (context: Context): MoveResourceType => {
+    parseEnum = this.RULE('parseEnum', (context: Context): [string, MoveResourceType] => {
         /*
         * public enum DEF {
         *   Tuple(u64, u64),
@@ -467,7 +557,7 @@ export class MoveParser extends EmbeddedActionsParser {
         
         let isPublic = false
         this.OPTION(() => {
-            this.CONSUME(Public)
+            this.CONSUME(PublicWithParam)
             isPublic = true
         })
         
@@ -539,8 +629,8 @@ export class MoveParser extends EmbeddedActionsParser {
         
         this.CONSUME1(CloseCurly)
         
-        !this.RECORDING_PHASE && context.registerBuiltInResource(enumName, enum_)
-        return enum_
+        // context.registerBuiltInResource(enumName, enum_)
+        return [enumName, enum_]
     })
     
     parseFunctionArgs = this.RULE('parseFunctionArgs', (context: Context): MoveStructFieldsType => {
@@ -569,14 +659,16 @@ export class MoveParser extends EmbeddedActionsParser {
     }
     
     // 解析函数，在遇到 macro-fun 时，返回 null
-    parseFunction = this.RULE('parseFunction', (context: Context): MoveFunctionType | null => {
+    parseFunction = this.RULE('parseFunction', (context: Context): [string, MoveFunctionType] | null => {
         !context && (context = new Context())
         const modifiers: MoveFunctionModifiers[] = []
         
         
         // 函数修饰符，native, public, entry, macro
         this.MANY(() => {
-            modifiers.push(this.CONSUME(FunctionModifiers).image as MoveFunctionModifiers)
+            let modifier = this.CONSUME(FunctionModifiers).image as MoveFunctionModifiers
+            modifiers.push(modifier)
+            // modifiers.push(this.CONSUME(FunctionModifiers).image as MoveFunctionModifiers)
         })
         
         this.CONSUME(Fun)
@@ -627,13 +719,13 @@ export class MoveParser extends EmbeddedActionsParser {
             this.CONSUME(Semicolon)
         }
         
-        return {
-            name: functionName,
+        return [functionName, {
+            target: `${context.info.packageName}::${context.info.moduleName}:${functionName}`,
             modifiers,
             generics,
             params,
             returns
-        }
+        }]
     })
     
     parseAsIfExists = this.RULE('parseAsIfExists', (): AsAlias => {
@@ -651,38 +743,6 @@ export class MoveParser extends EmbeddedActionsParser {
             alias: undefined
         }
     })
-    
-    parseUseField = this.RULE(
-        'parseUseField',
-        (registerResource: ReturnType<Context["resourceImporter"]>) => {
-            if (!registerResource) {
-                registerResource = () => {
-                }
-            }
-            
-            this.OR([{
-                ALT: () => {
-                    // 单个 resources
-                    const matched = this.SUBRULE(this.parseAsIfExists)
-                    registerResource(matched)
-                }
-            }, {
-                ALT: () => {
-                    // 多个 resources
-                    this.CONSUME(OpenCurly)
-                    this.MANY(() => {
-                        this.OPTION(() => {
-                            const matched = this.SUBRULE1(this.parseAsIfExists)
-                            registerResource(matched)
-                            this.OPTION1(() => {
-                                this.CONSUME(Comma)
-                            })
-                        })
-                    })
-                    this.CONSUME(CloseCurly)
-                }
-            }])
-        })
     
     parseImport = this.RULE('parseImport', (context: Context) => {
         // package::module;
@@ -890,89 +950,85 @@ export class MoveParser extends EmbeddedActionsParser {
         return context
     })
     
-    parseUse_ = this.RULE('parseUse_', (context: Context) => {
-        // use package::module;
-        // use package::module as alias;
-        // use package::module::function;
-        // use package::module::function as alias;
-        // use package::module::{function1, function2};
-        // use package::module::{function1, function2 as alias};
-        // use package::{module1::{function1}, module2::function2, module3};
+    
+    parseMoveAttributeBody = this.RULE('parseMoveAttributeBody', (attributes?: MoveAttributeType): MoveAttributeType => {
+        !(attributes) && (attributes = {})
+        
+        // method(sub1="some", sub2(subSub1="someSome"), sub3),?
+        // `method ,?` only
+        
+        // abc, def, hi = "hello", jk(...)
+        this.MANY(() => {
+            const profile = this.CONSUME(Literal).image
+            attributes[profile] = true
+            
+            this.OPTION({
+                GATE: () => this.LA(1).tokenType === Equal || this.LA(1).tokenType === OpenParen,
+                DEF: () => {
+                    this.OR([
+                        {
+                            GATE: () => this.LA(1).tokenType === Equal,
+                            ALT: () => {
+                                this.CONSUME(Equal)
+                                this.OR1([{
+                                    ALT: () => {
+                                        attributes[profile] = this.CONSUME(LiteralString).image
+                                    }
+                                    
+                                }, {
+                                    ALT: () => {
+                                        attributes[profile] = this.CONSUME1(Literal).image
+                                    }
+                                }])
+                            }
+                        }, {
+                            GATE: () => this.LA(1).tokenType === OpenParen,
+                            ALT: () => {
+                                this.CONSUME(OpenParen)
+                                attributes[profile] = this.SUBRULE(this.parseMoveAttributeBody, {ARGS: [{}]})
+                                this.CONSUME(CloseParen)
+                            }
+                            
+                        }
+                    ])
+                }
+            })
+            
+            
+            this.OPTION1(() => {
+                this.CONSUME(Comma)
+            })
+        })
+        
+        
+        return attributes
+    })
+    
+    parseMoveAttribute = this.RULE('parseMoveAttribute', (context: Context) => {
+        // #[move]
+        // #[move(abc)]
+        // #![move(abc, def)]
         !context && (context = new Context())
         
-        this.CONSUME(Use)
+        const attributes: MoveAttributeType = {}
         
-        // package
-        const packageName = this.CONSUME(Literal).image
-        this.CONSUME(DoubleColon)
+        this.CONSUME(Sharp)
+        this.OPTION(() => {
+            this.CONSUME(Bang)
+        })
+        this.CONSUME(LeftBracket)
         
-        this.OR([{
-            ALT: () => {
-                // 单个 module 导入
-                // use pkg::module::???;
-                const moduleName = this.CONSUME1(Literal).image
-                this.CONSUME1(DoubleColon)
-                const registerResource = context.resourceImporter({
-                    moduleName,
-                    packageName
-                })
-                this.SUBRULE(this.parseUseField, {
-                    ARGS: [registerResource]
-                })
-            }
-        }, {
-            ALT: () => {
-                // 多个 module
-                // use sui::{ table::Table, table::{Self, Table,},};
-                this.CONSUME(OpenCurly)
-                this.MANY(() => {
-                    // module
-                    const moduleName = this.CONSUME2(Literal).image
-                    
-                    if (this.LA(1).tokenType !== DoubleColon) {
-                        // module only
-                        context.registerResource(moduleName, {
-                            type: 'imported-module',
-                            target: `${packageName}::${moduleName}`
-                        })
-                        
-                        this.OPTION1(() => {
-                            this.CONSUME(Comma)
-                        })
-                        
-                        return
-                    }
-                    
-                    this.CONSUME2(DoubleColon)
-                    
-                    const registerResource = context.resourceImporter({
-                        moduleName,
-                        packageName
-                    })
-                    
-                    this.SUBRULE1(this.parseUseField, {
-                        ARGS: [registerResource]
-                    })
-                    
-                    this.OPTION2(() => {
-                        this.CONSUME(Comma)
-                    })
-                })
-                this.CONSUME(CloseCurly)
-            }
-        }, {
-            ALT: () => {
-                // use sui::coin;
-                const matched = this.SUBRULE2(this.parseAsIfExists)
-                context.registerResource(matched.alias ?? matched.original, {
-                    type: 'imported-module',
-                    target: `${packageName}::${matched.original}`,
-                })
-            }
-        }])
+        this.OPTION1(() => {
+            Object.assign(attributes, this.SUBRULE(this.parseMoveAttributeBody, {ARGS: [attributes]}))
+        })
         
+        this.CONSUME(RightBracket)
         
-        this.CONSUME(Semicolon)
+        if (Object.keys(attributes).length !== 0) {
+            context.registerAttribute(attributes)
+        }
+        
+        return attributes
     })
     
 }

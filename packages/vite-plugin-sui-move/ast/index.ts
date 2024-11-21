@@ -33,13 +33,7 @@ const source_ = `
     }
 `
 
-const source = `use sui::{
-    sui as suiii,
-    table::Table,
-    bag::{Self as baggg, Bag},
-};`
-
-// const source = `vector[1,2,3,4]`
+const source = `public fun from_package<T>`
 
 import { readFile } from 'fs/promises'
 const file = await readFile('test.move', {
