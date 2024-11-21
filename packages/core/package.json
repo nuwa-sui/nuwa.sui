@@ -1,0 +1,14 @@
+{
+  "name": "@nuwa.sui/core",
+  "module": "index.ts",
+  "type": "module",
+  "dependencies": {
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "vite": "^5.4.11"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  }
+}

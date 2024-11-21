@@ -4,5 +4,8 @@
   "type": "module",
   "workspaces": [
     "packages/*"
-  ]
+  ],
+  "dependencies": {
+    "@mysten/sui": "^1.14.3"
+  }
 }
