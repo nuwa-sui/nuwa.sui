@@ -58,28 +58,95 @@ export class MoveParser extends EmbeddedActionsParser {
     
     
     // 检查是否有指向 unknown 的资源引用，尝试在 builtInResources 中查找
-    private fixResourceReference(parsed: ParsedModule, context: Context) {
+    static fixResourceReference(parsed: ParsedModule, context: Context) {
         // 1. 遍历 resources 下所有 item 中的 fields 中 item 的 ref
         // 2. 遍历 functions 下所有 item 中的 params 和 returns
-        function fix(resource: MoveResourceType) {
-            if (resource.type === 'struct') {
-                resource.fields
+        function fix(resource: MoveResourceType, rePlace: (_: MoveResourceType) => void) {
+            if (resource.type === 'unknown') {
+                rePlace(context.resolveResources(resource.target))
             }
-        }
-        
-        
-        for (let key in parsed.resources) {
-            const resource = parsed.resources[key]
-            if (resource.type === 'struct') {
-                for (let fieldName in resource.fields) {
-                    const field = resource.fields[fieldName]
-                    
-                    
-                }
-            } else if (resource.type === 'enum') {
             
+            if (resource.type === 'struct') {
+                Object.values(resource.fields).forEach((field) => {
+                    fix(field.resource, (newResource) => {
+                        field.resource = newResource
+                    })
+                })
+                
+                // fix generics
+                Object.values(resource.fields).forEach((fields) => {
+                    Object.values(resource.fields).forEach((field) => {
+                        field.generics.values().forEach((generic) => {
+                            fix(generic.resource, (newResource) => {
+                                generic.resource = newResource
+                            })
+                        })
+                    })
+                })
+            }
+            
+            if (resource.type === 'enum') {
+                Object.values(resource.fields).forEach((field) => {
+                    if (field.type === 'struct') {
+                        Object.entries(field.fields).forEach(([fieldName, field]) => {
+                            fix(field.resource, (newResource) => {
+                                field.resource = newResource
+                            })
+                        })
+                        Object.values(field.fields).forEach((field) => {
+                            field.generics.forEach((generic) => {
+                                fix(generic.resource, (newResource) => {
+                                    generic.resource = newResource
+                                })
+                            })
+                        })
+                        
+                    } else if (field.type === 'tuple') {
+                        field.fields.forEach((field) => {
+                            fix(field.resource, (newResource) => {
+                                field.resource = newResource
+                            })
+                            
+                            // fix generics
+                            field.generics.values().forEach((generic) => {
+                                fix(generic.resource, (newResource) => {
+                                    generic.resource = newResource
+                                })
+                            })
+                        })
+                    }
+                })
             }
         }
+        
+        // 先修复 context
+        Object.entries(context.resources).forEach(([name, resource]) => {
+            // context 顶层应该不存在 unknown，这里主要让他去递归修复
+            fix(resource, (_) => {})
+        })
+        
+        // 修复 resource 中的引用
+        Object.entries(parsed.resources).forEach(([name, resource]) => {
+            // 同理，这里应该不存在 unknown
+            fix(resource, (newResource) => {})
+        })
+        
+        // 修复 function 中的引用
+        Object.values(parsed.functions).forEach((func) => {
+            // 参数
+            Object.values(func.params).forEach((param) => {
+                fix(param.resource, (newResource) => {
+                    param.resource = newResource
+                })
+            })
+            
+            // 返回值
+            for (const rst of func.returns) {
+                fix(rst.resource, (newResource) => {
+                    rst.resource = newResource
+                })
+            }
+        })
         
     }
     
@@ -104,8 +171,8 @@ export class MoveParser extends EmbeddedActionsParser {
             packageName: 'Unknown',
             moduleName: 'Unknown',
             test: false,
-            functions: {},
-            resources: {}
+            resources: {},
+            functions: {}
         }
         
         
@@ -155,6 +222,8 @@ export class MoveParser extends EmbeddedActionsParser {
         // this.fixResourceReference()
         parsedModule.resources = context.builtInResources
         parsedModule.functions = context.functions
+        
+        MoveParser.fixResourceReference(parsedModule, context)
         return parsedModule
     })
     
@@ -274,7 +343,8 @@ export class MoveParser extends EmbeddedActionsParser {
                 this.CONSUME(OpenParen)
                 
                 this.MANY(() => {
-                    result.push(this.SUBRULE(this.parseFieldRef, {ARGS: [context]}))
+                    const rst = this.SUBRULE(this.parseFieldRef, {ARGS: [context]})
+                    rst && result.push(rst)
                     this.OPTION1(() => {
                         this.CONSUME(Comma)
                     })
@@ -376,7 +446,7 @@ export class MoveParser extends EmbeddedActionsParser {
     })
     
     // 解析引用的资源，在 struct-field 或者 enum-field, fun-args，变量声明中使用
-    parseFieldRef = this.RULE('parseFieldRef', (context: Context): MoveResourceRefType => {
+    parseFieldRef = this.RULE('parseFieldRef', (context: Context): MoveResourceRefType | null => {
         // &TxContext, &mut Abc, u8, vector<u8>
         // Abc<Def, Asc<Table>>
         // sui::SUI
@@ -414,8 +484,12 @@ export class MoveParser extends EmbeddedActionsParser {
                 this.CONSUME(DoubleColon)
                 targetRepr += '::'
             })
+            
+            
         })
-        
+        if (!targetRepr.length) {
+            return null
+        }
         target = context.resolveResources(targetRepr)
         
         return {
@@ -463,7 +537,8 @@ export class MoveParser extends EmbeddedActionsParser {
                 })
                 const fieldName = this.CONSUME(Literal).image
                 this.CONSUME(Colon)
-                fields[fieldName] = this.SUBRULE(this.parseFieldRef, {ARGS: [context]})
+                const rst = this.SUBRULE(this.parseFieldRef, {ARGS: [context]})
+                rst && (fields[fieldName] = rst)
                 this.OPTION1(() => {
                     this.CONSUME(Comma)
                 })
@@ -516,8 +591,11 @@ export class MoveParser extends EmbeddedActionsParser {
             this.CONSUME(OpenParen)
             let idx = 0
             this.MANY(() => {
-                struct.fields[idx.toString()] = this.SUBRULE(this.parseFieldRef, {ARGS: [newContext]})
-                idx ++
+                const rst = this.SUBRULE(this.parseFieldRef, {ARGS: [newContext]})
+                if (rst) {
+                    struct.fields[idx.toString()] = rst
+                    idx++
+                }
             })
             this.CONSUME(CloseParen)
             isEmptyStruct = true
@@ -705,7 +783,8 @@ export class MoveParser extends EmbeddedActionsParser {
                 }, {
                     ALT: () => {
                         // single return
-                        returns = [this.SUBRULE(this.parseFieldRef, {ARGS: [newContext]})]
+                        const rst = this.SUBRULE(this.parseFieldRef, {ARGS: [newContext]})
+                        returns = rst ? [rst] : []
                     }
                 }])
             }

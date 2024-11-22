@@ -46,5 +46,8 @@ const tokens = MoveLexer.tokenize(file).tokens
 
 const parser = new MoveParser(tokens)
 
-console.log(JSON.stringify(parser.parseModule()))
+const result = parser.parseModule()
 parser.errors.length && console.log(parser.errors)
+console.log(JSON.stringify(result))
+
+

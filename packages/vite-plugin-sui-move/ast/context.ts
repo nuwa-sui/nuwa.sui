@@ -156,42 +156,6 @@ export class Context {
         // }
     }
     
-    public resourceImporter(opts: {
-        packageName: string,
-        moduleName: string,
-    }) {
-        const {packageName, moduleName} = opts
-        return (target: AsAlias | string) => {
-            if (typeof target === 'string') {
-                if (target === 'Self') {
-                    this.registerResource(target, {
-                        type: 'imported-module',
-                        target: `${packageName}::${moduleName}`,
-                    })
-                    return;
-                }
-                
-                this.registerResource(target, {
-                    type: 'imported',
-                    target: `${packageName}::${moduleName}::${target}`,
-                })
-                return;
-            } else if ('original' in target) {
-                if (target.original === 'Self') {
-                    this.registerResource(target.alias ?? moduleName, {
-                        type: 'imported-module',
-                        target: `${packageName}::${moduleName}`,
-                    })
-                    return;
-                }
-                this.registerResource(target.alias ?? target.original, {
-                    type: 'imported',
-                    target: `${packageName}::${moduleName}::${target.original}`,
-                })
-            }
-        }
-    }
-    
     public registerFunction(name: string, func: MoveFunctionType) {
         this.functions[name] = func
     }
