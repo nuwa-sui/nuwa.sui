@@ -1,15 +1,13 @@
-import type { Transaction } from '@mysten/sui/transactions'
-
 import type {
-    ParamType,
-    MovePackageABI,
-    MovePackage,
     MoveModuleABI,
+    MovePackage,
+    MovePackageABI,
+    ParamType,
 } from './types.ts'
 
 export type {
-    ParamType,
-    MovePackageABI,
-    MovePackage,
     MoveModuleABI,
+    MovePackage,
+    MovePackageABI,
+    ParamType,
 }

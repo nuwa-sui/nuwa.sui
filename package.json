@@ -1,11 +1,27 @@
 {
-  "private": true,
-  "name": "nuwa.sui",
-  "type": "module",
-  "workspaces": [
-    "packages/*"
-  ],
-  "dependencies": {
-    "@mysten/sui": "^1.14.3"
-  }
+    "name": "nuwa.sui",
+    "type": "module",
+    "private": true,
+    "workspaces": [
+        "packages/*"
+    ],
+    "dependencies": {},
+    "devDependencies": {
+        "@antfu/eslint-config": "^3.10.0",
+        "eslint": "^9.15.0",
+        "husky": "^9.1.7",
+        "lint-staged": "^15.2.10",
+        "prettier": "^3.4.0"
+    },
+    "husky": {
+        "hooks": {
+            "pre-commit": "lint-staged"
+        }
+    },
+    "lint-staged": {
+        "*": [
+            "prettier --config .prettierrc --write",
+            "eslint --fix"
+        ]
+    }
 }

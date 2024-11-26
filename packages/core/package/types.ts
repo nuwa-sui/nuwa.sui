@@ -1,4 +1,4 @@
-import {type TransactionObjectInput, type TransactionResult} from '@mysten/sui/transactions'
+import type { TransactionObjectInput, TransactionResult } from '@mysten/sui/transactions'
 
 export type PrimitiveMoveType = 'u8' | 'u16' | 'u32' | 'u64' | 'u128' | 'u256' | 'bool' | 'string' | 'address'
 export type VectorPrimitiveType = `vector<${PrimitiveMoveType}>`
@@ -45,36 +45,35 @@ export type MoveParamToTsType<T extends ParamType> =
                                         ? TransactionObjectInput | string
                                         : T extends 'enum'
                                             ? never
-                                            : never;
+                                            : never
 
 export type ContractFunctions = Record<string, {
-    name: string,
-    native: boolean,
-    entry: boolean,
-    public: boolean,
+    name: string
+    native: boolean
+    entry: boolean
+    public: boolean
     params: Record<string, ParamType>
 }>
 
 export type ContractResource = Record<string, {
-    name: string,
-    type: 'struct' | 'enum',
-    ability: ('key' | 'store' | 'copy' | 'drop')[],
+    name: string
+    type: 'struct' | 'enum'
+    ability: ('key' | 'store' | 'copy' | 'drop')[]
     definition: Record<string, string | PrimitiveMoveType | VectorPrimitiveType>
 }>
 
-
-export type MoveModuleABI = {
-    package: string,
-    name: string,
-    functions: ContractFunctions,
-    structs: ContractResource,
+export interface MoveModuleABI {
+    package: string
+    name: string
+    functions: ContractFunctions
+    structs: ContractResource
     dependencies?: Record<string, MoveModuleABI>
 }
 
 export type MovePackageABI<Modules extends string[]> = {
-    package: string,
-    name: string,
-    
+    package: string
+    name: string
+
 } & {
     [module in Modules[number]]: MoveModuleABI
 }
@@ -92,15 +91,9 @@ export type MovePackage<Modules extends string[], ABI extends MovePackageABI<Mod
                         : MoveParamToTsType<ABI[module_]['functions'][K]['params'][P]> | TransactionResult
                 }
             ) => TransactionResult
-        },
+        }
         objects: {
             [key: string]: any
         }
     }
 }
-
-
-
-
-
-

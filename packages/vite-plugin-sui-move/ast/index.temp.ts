@@ -1,6 +1,5 @@
 import {MoveLexer} from "./tokens";
 import {MoveParser} from './parser'
-import {Context} from './context'
 
 export {MoveLexer, MoveParser}
 

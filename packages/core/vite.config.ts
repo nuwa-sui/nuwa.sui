@@ -3,13 +3,13 @@ import { defineConfig } from 'vite'
 export default defineConfig({
     publicDir: false,
     build: {
-        lib:{
+        lib: {
             entry: 'index.ts',
             name: '@nuwa.sui/core',
-            fileName: 'index'
+            fileName: 'index',
         },
         rollupOptions: {
-            external: ['@mysten/sui']
-        }
-    }
+            external: ['@mysten/sui'],
+        },
+    },
 })
