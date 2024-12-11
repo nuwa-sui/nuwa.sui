@@ -52,255 +52,6 @@ import {
 } from './tokens'
 
 export class MoveParser extends EmbeddedActionsParser {
-    constructor(input: IToken[]) {
-        super(tokens)
-        this.performSelfAnalysis()
-        this.input = input
-    }
-
-    // 检查是否有指向 unknown 的资源引用，尝试在 builtInResources 中查找
-    static fixResourceReference(parsed: ParsedModule, context: Context): void {
-        // 1. 遍历 resources 下所有 item 中的 fields 中 item 的 ref
-        // 2. 遍历 functions 下所有 item 中的 params 和 returns
-        function fix(resource: MoveResourceType, rePlace: (_: MoveResourceType) => void): void {
-            if (resource.type === 'unknown') {
-                rePlace(context.resolveResources(resource.target))
-            }
-
-            if (resource.type === 'struct') {
-                Object.values(resource.fields).forEach((field) => {
-                    fix(field.resource, (newResource) => {
-                        field.resource = newResource
-                    })
-                })
-
-                // fix generics
-                Object.values(resource.fields).forEach(() => {
-                    Object.values(resource.fields).forEach((field) => {
-                        field.generics.values().forEach((generic) => {
-                            fix(generic.resource, (newResource) => {
-                                generic.resource = newResource
-                            })
-                        })
-                    })
-                })
-            }
-
-            if (resource.type === 'enum') {
-                Object.values(resource.fields).forEach((field) => {
-                    if (field.type === 'struct') {
-                        Object.entries(field.fields).forEach(([_, field]) => {
-                            fix(field.resource, (newResource) => {
-                                field.resource = newResource
-                            })
-                        })
-                        Object.values(field.fields).forEach((field) => {
-                            field.generics.forEach((generic) => {
-                                fix(generic.resource, (newResource) => {
-                                    generic.resource = newResource
-                                })
-                            })
-                        })
-                    }
-                    else if (field.type === 'tuple') {
-                        field.fields.forEach((field) => {
-                            fix(field.resource, (newResource) => {
-                                field.resource = newResource
-                            })
-
-                            // fix generics
-                            field.generics.values().forEach((generic) => {
-                                fix(generic.resource, (newResource) => {
-                                    generic.resource = newResource
-                                })
-                            })
-                        })
-                    }
-                })
-            }
-        }
-
-        // 先修复 context
-        Object.entries(context.resources).forEach(([_, resource]) => {
-            // context 顶层应该不存在 unknown，这里主要让他去递归修复
-            fix(resource, (_) => {})
-        })
-
-        // 修复 resource 中的引用
-        Object.entries(parsed.resources).forEach(([_, resource]) => {
-            // 同理，这里应该不存在 unknown
-            fix(resource, () => {})
-        })
-
-        // 修复 function 中的引用
-        Object.values(parsed.functions).forEach((func) => {
-            // 参数
-            Object.values(func.params).forEach((param) => {
-                fix(param.resource, (newResource) => {
-                    param.resource = newResource
-                })
-            })
-
-            // 返回值
-            for (const rst of func.returns) {
-                fix(rst.resource, (newResource) => {
-                    rst.resource = newResource
-                })
-            }
-        })
-    }
-
-    // 如果 attributes 中包含 test_only 或者 test，则返回一个新的 context，不会影响原有 context
-    private newContextIfTestOnly(context: Context): [Context, MoveAttributeType] {
-        const attributes = context.consumeAttributes()
-
-        if ('test_only' in attributes || 'test' in attributes) {
-            // test only
-            return [new Context(), attributes]
-        }
-
-        return [context, attributes]
-    }
-
-    // 解析模块, 返回 ParsedModule
-    parseModule = this.RULE('parseModule', (): ParsedModule => {
-        // module package::module {}?;
-        // module package::module; ...
-
-        const parsedModule: ParsedModule = {
-            packageName: 'Unknown',
-            moduleName: 'Unknown',
-            test: false,
-            resources: {},
-            functions: {},
-        }
-
-        this.MANY(() => {
-            const tempContext = new Context()
-            this.SUBRULE(this.parseMoveAttribute, { ARGS: [tempContext] })
-
-            const attributes = tempContext.consumeAttributes()
-
-            if ('test_only' in attributes || 'test' in attributes) {
-                // test module，skip
-                parsedModule.test = true
-            }
-        })
-
-        this.CONSUME(Module)
-        const packageName = this.CONSUME(Literal).image
-        parsedModule.packageName = packageName
-        this.CONSUME(DoubleColon)
-        const moduleName = this.CONSUME1(Literal).image
-        parsedModule.moduleName = moduleName
-
-        const context = new Context({
-            packageName,
-            moduleName,
-        })
-
-        this.OR([{
-            GATE: () => this.LA(1).tokenType === OpenCurly,
-            ALT: () => {
-                this.CONSUME(OpenCurly)
-                this.SUBRULE(this.parseModuleBody, { ARGS: [context] })
-                this.CONSUME(CloseCurly)
-                this.OPTION(() => {
-                    this.CONSUME1(Semicolon)
-                })
-            },
-        }, {
-            GATE: () => this.LA(1).tokenType === Semicolon,
-            ALT: () => {
-                this.CONSUME(Semicolon)
-                this.SUBRULE1(this.parseModuleBody, { ARGS: [context] })
-            },
-        }])
-
-        // this.fixResourceReference()
-        parsedModule.resources = context.builtInResources
-        parsedModule.functions = context.functions
-
-        MoveParser.fixResourceReference(parsedModule, context)
-        return parsedModule
-    })
-
-    parseModuleBody = this.RULE('parseModuleBody', (context_: Context) => {
-        // uses
-        // consts
-        // resources
-        // functions
-        !context_ && (context_ = new Context())
-
-        this.MANY(() => {
-            this.OR([
-                {
-                    GATE: () => this.LA(1).tokenType === Use || this.LA(2).tokenType === Use,
-                    ALT: () => {
-                        context_.consumeAttributes()
-                        this.SUBRULE(this.parseUse, { ARGS: [context_] })
-                    },
-                },
-                {
-                    ALT: () => {
-                        const [context, attributes] = this.newContextIfTestOnly(context_)
-                        const rst = this.SUBRULE(this.parseStruct, { ARGS: [context] })
-
-                        this.ACTION(() => {
-                            const [name, struct] = rst
-                            if (
-                                attributes.ext
-                                && typeof attributes.ext === 'object'
-                                && 'unique_object' in attributes.ext
-                                && struct.type === 'struct'
-                            ) {
-                                struct.unique = true
-                            }
-                            context.registerBuiltInResource(name, struct)
-                        })
-                    },
-                },
-                {
-                    ALT: () => {
-                        const [context] = this.newContextIfTestOnly(context_)
-                        const rst = this.SUBRULE(this.parseEnum, { ARGS: [context] })
-
-                        this.ACTION(() => {
-                            const [name, enum_] = rst
-                            context.registerBuiltInResource(name, enum_)
-                        })
-                    },
-                },
-                {
-                    ALT: () => {
-                        context_.consumeAttributes()
-                        this.SUBRULE(this.parseVarDeclaration)
-                    },
-                },
-                {
-                    ALT: () => {
-                        const [context] = this.newContextIfTestOnly(context_)
-
-                        const rst = this.SUBRULE(this.parseFunction, { ARGS: [context] })
-
-                        this.ACTION(() => {
-                            if (rst) {
-                                const [name, function_] = rst
-                                context.registerFunction(name, function_)
-                            }
-                        })
-                    },
-                },
-                {
-                    GATE: () => this.LA(1).tokenType === Sharp,
-                    ALT: () => {
-                        this.SUBRULE(this.parseMoveAttribute, { ARGS: [context_] })
-                    },
-                },
-            ])
-        })
-    })
-
     // 解析变量声明 let, const，目前跳过，不解析
     parseVarDeclaration = this.RULE('parseVarDeclaration', () => {
         this.OR([{
@@ -322,32 +73,6 @@ export class MoveParser extends EmbeddedActionsParser {
         }
 
         this.CONSUME(Semicolon)
-    })
-
-    // 解析元组，可以用于解析 fun-args, fun-return, etc.
-    parseTuple = this.RULE('parseTuple', (context: Context): MoveResourceRefType[] => {
-        !context && (context = new Context())
-
-        const result: MoveResourceRefType[] = []
-
-        this.OPTION({
-            GATE: () => this.LA(1).tokenType === OpenParen,
-            DEF: () => {
-                this.CONSUME(OpenParen)
-
-                this.MANY(() => {
-                    const rst = this.SUBRULE(this.parseFieldRef, { ARGS: [context] })
-                    rst && result.push(rst)
-                    this.OPTION1(() => {
-                        this.CONSUME(Comma)
-                    })
-                })
-
-                this.CONSUME(CloseParen)
-            },
-        })
-
-        return result
     })
 
     // 解析泛型，在 struct, enum, function 中声明泛型时使用
@@ -489,6 +214,32 @@ export class MoveParser extends EmbeddedActionsParser {
                 ARGS: [context],
             }),
         }
+    })
+
+    // 解析元组，可以用于解析 fun-args, fun-return, etc.
+    parseTuple = this.RULE('parseTuple', (context: Context): MoveResourceRefType[] => {
+        !context && (context = new Context())
+
+        const result: MoveResourceRefType[] = []
+
+        this.OPTION({
+            GATE: () => this.LA(1).tokenType === OpenParen,
+            DEF: () => {
+                this.CONSUME(OpenParen)
+
+                this.MANY(() => {
+                    const rst = this.SUBRULE(this.parseFieldRef, { ARGS: [context] })
+                    rst && result.push(rst)
+                    this.OPTION1(() => {
+                        this.CONSUME(Comma)
+                    })
+                })
+
+                this.CONSUME(CloseParen)
+            },
+        })
+
+        return result
     })
 
     // 用于解析 struct 和 enum 的 ability
@@ -706,25 +457,6 @@ export class MoveParser extends EmbeddedActionsParser {
         this.CONSUME(CloseParen)
         return fields
     })
-
-    dropCodeBlock(): void {
-        if (!this.RECORDING_PHASE) {
-            let leftCloseCurly = 0
-            do {
-                const next = this.LA(1).tokenType
-                if (next === OpenCurly) {
-                    // new block
-                    leftCloseCurly++
-                }
-                else if (this.LA(1).tokenType === CloseCurly) {
-                    // end block
-                    leftCloseCurly--
-                }
-                // console.log('drop: ', this.LA(1).image)
-                this.SKIP_TOKEN()
-            } while (leftCloseCurly !== 0)
-        }
-    }
 
     // 解析函数，在遇到 macro-fun 时，返回 null
     parseFunction = this.RULE('parseFunction', (context: Context): [string, MoveFunctionType] | null => {
@@ -1093,4 +825,274 @@ export class MoveParser extends EmbeddedActionsParser {
 
         return attributes
     })
+
+    parseModuleBody = this.RULE('parseModuleBody', (context_: Context) => {
+        // uses
+        // consts
+        // resources
+        // functions
+        !context_ && (context_ = new Context())
+
+        this.MANY(() => {
+            this.OR([
+                {
+                    GATE: () => this.LA(1).tokenType === Use || this.LA(2).tokenType === Use,
+                    ALT: () => {
+                        context_.consumeAttributes()
+                        this.SUBRULE(this.parseUse, { ARGS: [context_] })
+                    },
+                },
+                {
+                    ALT: () => {
+                        const [context, attributes] = this.newContextIfTestOnly(context_)
+                        const rst = this.SUBRULE(this.parseStruct, { ARGS: [context] })
+
+                        this.ACTION(() => {
+                            const [name, struct] = rst
+                            if (
+                                attributes.ext
+                                && typeof attributes.ext === 'object'
+                                && 'unique_object' in attributes.ext
+                                && struct.type === 'struct'
+                            ) {
+                                struct.unique = true
+                            }
+                            context.registerBuiltInResource(name, struct)
+                        })
+                    },
+                },
+                {
+                    ALT: () => {
+                        const [context] = this.newContextIfTestOnly(context_)
+                        const rst = this.SUBRULE(this.parseEnum, { ARGS: [context] })
+
+                        this.ACTION(() => {
+                            const [name, enum_] = rst
+                            context.registerBuiltInResource(name, enum_)
+                        })
+                    },
+                },
+                {
+                    ALT: () => {
+                        context_.consumeAttributes()
+                        this.SUBRULE(this.parseVarDeclaration)
+                    },
+                },
+                {
+                    ALT: () => {
+                        const [context] = this.newContextIfTestOnly(context_)
+
+                        const rst = this.SUBRULE(this.parseFunction, { ARGS: [context] })
+
+                        this.ACTION(() => {
+                            if (rst) {
+                                const [name, function_] = rst
+                                context.registerFunction(name, function_)
+                            }
+                        })
+                    },
+                },
+                {
+                    GATE: () => this.LA(1).tokenType === Sharp,
+                    ALT: () => {
+                        this.SUBRULE(this.parseMoveAttribute, { ARGS: [context_] })
+                    },
+                },
+            ])
+        })
+    })
+
+    // 解析模块, 返回 ParsedModule
+    parseModule = this.RULE('parseModule', (): ParsedModule => {
+        // module package::module {}?;
+        // module package::module; ...
+
+        const parsedModule: ParsedModule = {
+            packageName: 'Unknown',
+            moduleName: 'Unknown',
+            test: false,
+            resources: {},
+            functions: {},
+        }
+
+        this.MANY(() => {
+            const tempContext = new Context()
+            this.SUBRULE(this.parseMoveAttribute, { ARGS: [tempContext] })
+
+            const attributes = tempContext.consumeAttributes()
+
+            if ('test_only' in attributes || 'test' in attributes) {
+                // test module，skip
+                parsedModule.test = true
+            }
+        })
+
+        this.CONSUME(Module)
+        const packageName = this.CONSUME(Literal).image
+        parsedModule.packageName = packageName
+        this.CONSUME(DoubleColon)
+        const moduleName = this.CONSUME1(Literal).image
+        parsedModule.moduleName = moduleName
+
+        const context = new Context({
+            packageName,
+            moduleName,
+        })
+
+        this.OR([{
+            GATE: () => this.LA(1).tokenType === OpenCurly,
+            ALT: () => {
+                this.CONSUME(OpenCurly)
+                this.SUBRULE(this.parseModuleBody, { ARGS: [context] })
+                this.CONSUME(CloseCurly)
+                this.OPTION(() => {
+                    this.CONSUME1(Semicolon)
+                })
+            },
+        }, {
+            GATE: () => this.LA(1).tokenType === Semicolon,
+            ALT: () => {
+                this.CONSUME(Semicolon)
+                this.SUBRULE1(this.parseModuleBody, { ARGS: [context] })
+            },
+        }])
+
+        // this.fixResourceReference()
+        parsedModule.resources = context.builtInResources
+        parsedModule.functions = context.functions
+
+        MoveParser.fixResourceReference(parsedModule, context)
+        return parsedModule
+    })
+
+    constructor(input?: IToken[]) {
+        super(tokens)
+        this.performSelfAnalysis()
+        input && (this.input = input)
+    }
+
+    // 检查是否有指向 unknown 的资源引用，尝试在 builtInResources 中查找
+    static fixResourceReference(parsed: ParsedModule, context: Context): void {
+        // 1. 遍历 resources 下所有 item 中的 fields 中 item 的 ref
+        // 2. 遍历 functions 下所有 item 中的 params 和 returns
+        function fix(resource: MoveResourceType, rePlace: (_: MoveResourceType) => void): void {
+            if (resource.type === 'unknown') {
+                rePlace(context.resolveResources(resource.target))
+            }
+
+            if (resource.type === 'struct') {
+                Object.values(resource.fields).forEach((field) => {
+                    fix(field.resource, (newResource) => {
+                        field.resource = newResource
+                    })
+                })
+
+                // fix generics
+                Object.values(resource.fields).forEach(() => {
+                    Object.values(resource.fields).forEach((field) => {
+                        field.generics.forEach((generic) => {
+                            fix(generic.resource, (newResource) => {
+                                generic.resource = newResource
+                            })
+                        })
+                    })
+                })
+            }
+
+            if (resource.type === 'enum') {
+                Object.values(resource.fields).forEach((field) => {
+                    if (field.type === 'struct') {
+                        Object.entries(field.fields).forEach(([_, field]) => {
+                            fix(field.resource, (newResource) => {
+                                field.resource = newResource
+                            })
+                        })
+                        Object.values(field.fields).forEach((field) => {
+                            field.generics.forEach((generic) => {
+                                fix(generic.resource, (newResource) => {
+                                    generic.resource = newResource
+                                })
+                            })
+                        })
+                    }
+                    else if (field.type === 'tuple') {
+                        field.fields.forEach((field) => {
+                            fix(field.resource, (newResource) => {
+                                field.resource = newResource
+                            })
+
+                            // fix generics
+                            field.generics.forEach((generic) => {
+                                fix(generic.resource, (newResource) => {
+                                    generic.resource = newResource
+                                })
+                            })
+                        })
+                    }
+                })
+            }
+        }
+
+        // 先修复 context
+        Object.entries(context.resources).forEach(([_, resource]) => {
+            // context 顶层应该不存在 unknown，这里主要让他去递归修复
+            fix(resource, (_) => {
+            })
+        })
+
+        // 修复 resource 中的引用
+        Object.entries(parsed.resources).forEach(([_, resource]) => {
+            // 同理，这里应该不存在 unknown
+            fix(resource, () => {
+            })
+        })
+
+        // 修复 function 中的引用
+        Object.values(parsed.functions).forEach((func) => {
+            // 参数
+            Object.values(func.params).forEach((param) => {
+                fix(param.resource, (newResource) => {
+                    param.resource = newResource
+                })
+            })
+
+            // 返回值
+            for (const rst of func.returns) {
+                fix(rst.resource, (newResource) => {
+                    rst.resource = newResource
+                })
+            }
+        })
+    }
+
+    dropCodeBlock(): void {
+        if (!this.RECORDING_PHASE) {
+            let leftCloseCurly = 0
+            do {
+                const next = this.LA(1).tokenType
+                if (next === OpenCurly) {
+                    // new block
+                    leftCloseCurly++
+                }
+                else if (this.LA(1).tokenType === CloseCurly) {
+                    // end block
+                    leftCloseCurly--
+                }
+                // console.log('drop: ', this.LA(1).image)
+                this.SKIP_TOKEN()
+            } while (leftCloseCurly !== 0)
+        }
+    }
+
+    // 如果 attributes 中包含 test_only 或者 test，则返回一个新的 context，不会影响原有 context
+    private newContextIfTestOnly(context: Context): [Context, MoveAttributeType] {
+        const attributes = context.consumeAttributes()
+
+        if ('test_only' in attributes || 'test' in attributes) {
+            // test only
+            return [new Context(), attributes]
+        }
+
+        return [context, attributes]
+    }
 }

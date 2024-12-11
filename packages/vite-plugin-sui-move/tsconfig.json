@@ -23,11 +23,15 @@
         "noEmit": true,
         "isolatedModules": true,
         "skipLibCheck": true,
-        "noUncheckedSideEffectImports": true
+        "noUncheckedSideEffectImports": true,
+        "paths": {
+            "@ast/*": [
+                "./ast/*"
+            ]
+        }
     },
     "include": [
-        "**.ts",
-        "**.tsx",
-        "**.d.ts"
+        "ast/**/*",
+        "test/**/*"
     ]
 }
