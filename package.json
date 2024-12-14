@@ -12,15 +12,13 @@
         "@antfu/eslint-config": "^3.10.0",
         "eslint": "^9.15.0",
         "lint-staged": "^15.2.10",
-        "prettier": "^3.4.0",
         "simple-git-hooks": "^2.11.1"
     },
     "simple-git-hooks": {
-        "pre-commit": "lint-staged"
+        "pre-commit": "pnpm exec lint-staged"
     },
     "lint-staged": {
         "*": [
-            "prettier --config .prettierrc --write",
             "eslint --fix"
         ]
     }

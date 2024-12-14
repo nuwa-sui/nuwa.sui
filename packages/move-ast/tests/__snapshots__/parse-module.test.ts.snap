@@ -1,0 +1,132 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`should fix error reference 1`] = `
+{
+  "functions": {
+    "abc": {
+      "generics": [],
+      "modifiers": [
+        "public",
+      ],
+      "params": {
+        "arg": {
+          "generics": [],
+          "ref": "value",
+          "resource": {
+            "abilities": [],
+            "fields": {
+              "value": {
+                "generics": [],
+                "ref": "value",
+                "resource": {
+                  "target": "sui::sui::SUI",
+                  "type": "imported",
+                },
+              },
+            },
+            "generics": [],
+            "public": true,
+            "target": "TestPackage::TestModule::TestA",
+            "type": "struct",
+            "unique": false,
+          },
+        },
+      },
+      "returns": [
+        {
+          "generics": [],
+          "ref": "value",
+          "resource": {
+            "abilities": [],
+            "fields": {
+              "value": {
+                "generics": [],
+                "ref": "value",
+                "resource": {
+                  "abilities": [],
+                  "fields": {
+                    "value": {
+                      "generics": [],
+                      "ref": "value",
+                      "resource": {
+                        "target": "sui::sui::SUI",
+                        "type": "imported",
+                      },
+                    },
+                  },
+                  "generics": [],
+                  "public": true,
+                  "target": "TestPackage::TestModule::TestA",
+                  "type": "struct",
+                  "unique": false,
+                },
+              },
+            },
+            "generics": [],
+            "public": true,
+            "target": "TestPackage::TestModule::TestB",
+            "type": "struct",
+            "unique": false,
+          },
+        },
+      ],
+      "target": "TestPackage::TestModule::abc",
+    },
+  },
+  "moduleName": "TestModule",
+  "packageName": "TestPackage",
+  "resources": {
+    "TestA": {
+      "abilities": [],
+      "fields": {
+        "value": {
+          "generics": [],
+          "ref": "value",
+          "resource": {
+            "target": "sui::sui::SUI",
+            "type": "imported",
+          },
+        },
+      },
+      "generics": [],
+      "public": true,
+      "target": "TestPackage::TestModule::TestA",
+      "type": "struct",
+      "unique": false,
+    },
+    "TestB": {
+      "abilities": [],
+      "fields": {
+        "value": {
+          "generics": [],
+          "ref": "value",
+          "resource": {
+            "abilities": [],
+            "fields": {
+              "value": {
+                "generics": [],
+                "ref": "value",
+                "resource": {
+                  "target": "sui::sui::SUI",
+                  "type": "imported",
+                },
+              },
+            },
+            "generics": [],
+            "public": true,
+            "target": "TestPackage::TestModule::TestA",
+            "type": "struct",
+            "unique": false,
+          },
+        },
+      },
+      "generics": [],
+      "public": true,
+      "target": "TestPackage::TestModule::TestB",
+      "type": "struct",
+      "unique": false,
+    },
+  },
+  "test": false,
+}
+`;

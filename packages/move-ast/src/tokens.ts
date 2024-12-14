@@ -109,6 +109,7 @@ export const Phantom = createToken({ name: 'Phantom', pattern: /\bphantom\b/, ca
 export const LiteralValue = createToken({ name: 'LiteralValue', pattern: Lexer.NA })
 export const LiteralAddress = createToken({ name: 'Address', pattern: /@\w+\b/, categories: [LiteralValue] })
 export const LiteralIntegers = createToken({ name: 'Integers', pattern: /\b\d[\d_]*(u256|u128|u64|u32|u16|u8)?\b/, categories: [LiteralValue] })
+export const LiteralHex = createToken({ name: 'Hex', pattern: /\b0x[0-9a-fA-F]+\b/, categories: [LiteralValue] })
 export const LiteralString = createToken({ name: 'String', pattern: /b?"[^"]*"/, categories: [LiteralValue] })
 // eslint-disable-next-line regexp/no-dupe-disjunctions
 export const Identifier = createToken({ name: 'Identifier', pattern: /\b[a-z_]\w*\b|`[a-z_]\w*`|\b_\b/i, categories: [Literal] })
@@ -122,6 +123,7 @@ export const allTokens = [
     LiteralValue,
     LiteralAddress,
     LiteralIntegers,
+    LiteralHex,
     LiteralString,
 
     WhiteSpace,

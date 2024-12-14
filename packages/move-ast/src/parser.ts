@@ -33,6 +33,7 @@ import {
     LessThan,
     Let,
     Literal,
+    LiteralHex,
     LiteralString,
     Module,
     MoveAbilities,
@@ -53,7 +54,7 @@ import {
 
 export class MoveParser extends EmbeddedActionsParser {
     // 解析变量声明 let, const，目前跳过，不解析
-    parseVarDeclaration = this.RULE('parseVarDeclaration', () => {
+    parseVarDeclaration = this.RULE('parseVarDeclaration', (): null => {
         this.OR([{
             ALT: () => {
                 this.CONSUME(Let)
@@ -73,6 +74,8 @@ export class MoveParser extends EmbeddedActionsParser {
         }
 
         this.CONSUME(Semicolon)
+
+        return null
     })
 
     // 解析泛型，在 struct, enum, function 中声明泛型时使用
@@ -198,8 +201,7 @@ export class MoveParser extends EmbeddedActionsParser {
             targetRepr += this.CONSUME(Literal).image
 
             this.OPTION1(() => {
-                this.CONSUME(DoubleColon)
-                targetRepr += '::'
+                targetRepr += this.CONSUME(DoubleColon).image
             })
         })
         if (!targetRepr.length) {
@@ -326,35 +328,48 @@ export class MoveParser extends EmbeddedActionsParser {
             }
         }
 
-        let isEmptyStruct = false
-        this.OPTION1(() => {
-            // empty struct
-            this.CONSUME(OpenParen)
-            let idx = 0
-            this.MANY(() => {
-                const rst = this.SUBRULE(this.parseFieldRef, { ARGS: [newContext] })
-                if (rst) {
-                    struct.fields[idx.toString()] = rst
-                    idx++
-                }
-            })
-            this.CONSUME(CloseParen)
-            isEmptyStruct = true
-        })
-
         struct.abilities = this.SUBRULE(this.parseAbility)
 
-        if (!isEmptyStruct) {
-            this.CONSUME(OpenCurly)
-            // parseFields
+        this.OR([
+            {
+                GATE: () => this.LA(1).tokenType === OpenParen,
+                ALT: () => {
+                    // Tuple struct
+                    this.CONSUME(OpenParen)
+                    let idx = 0
+                    this.MANY(() => {
+                        const rst = this.SUBRULE(this.parseFieldRef, { ARGS: [newContext] })
 
-            struct.fields = this.SUBRULE(this.parseStructFields, { ARGS: [newContext] })
+                        this.OPTION1(() => {
+                            this.CONSUME(Comma)
+                        })
 
-            this.CONSUME(CloseCurly)
-        }
-        else {
-            this.CONSUME(Semicolon)
-        }
+                        if (rst) {
+                            struct.fields[idx.toString()] = rst
+                            idx++
+                        }
+                    })
+                    this.CONSUME(CloseParen)
+
+                    this.OPTION2({
+                        GATE: () => this.LA(1).tokenType === Has,
+                        DEF: () => {
+                            struct.abilities = this.SUBRULE1(this.parseAbility)
+                            this.CONSUME(Semicolon)
+                        },
+                    })
+                },
+            },
+            {
+                GATE: () => this.LA(1).tokenType === OpenCurly,
+                ALT: () => {
+                    // object struct
+                    this.CONSUME(OpenCurly)
+                    struct.fields = this.SUBRULE(this.parseStructFields, { ARGS: [newContext] })
+                    this.CONSUME(CloseCurly)
+                },
+            },
+        ])
 
         // context.registerBuiltInResource(structName, struct)
         return [structName, struct]
@@ -428,7 +443,7 @@ export class MoveParser extends EmbeddedActionsParser {
                         },
                     },
                     {
-                        GATE: () => nextToken === Comma,
+                        GATE: () => nextToken === Comma || nextToken === CloseCurly,
                         ALT: () => {
                             // single
                             enum_.fields[fieldName] = {
@@ -521,7 +536,7 @@ export class MoveParser extends EmbeddedActionsParser {
         }
 
         return [functionName, {
-            target: `${context.info.packageName}::${context.info.moduleName}:${functionName}`,
+            target: `${context.info.packageName}::${context.info.moduleName}::${functionName}`,
             modifiers,
             generics,
             params,
@@ -558,11 +573,25 @@ export class MoveParser extends EmbeddedActionsParser {
 
         !context && (context = new Context())
 
-        const packageName = this.CONSUME(Literal).image
+        let packageName: string
+        this.OR([
+            {
+                ALT: () => {
+                    // name resolve
+                    packageName = this.CONSUME(Literal).image
+                },
+            },
+            {
+                ALT: () => {
+                    // addr resolve
+                    packageName = this.CONSUME(LiteralHex).image
+                },
+            },
+        ])
 
         this.CONSUME(DoubleColon)
 
-        this.OR([
+        this.OR1([
             {
                 // single module import
                 GATE: this.BACKTRACK(this.parseAsIfExists),
@@ -571,7 +600,7 @@ export class MoveParser extends EmbeddedActionsParser {
                     if (matched.alias) {
                         // `module as alias`, stop to import sub resources
                         context.registerResource(matched.alias, {
-                            type: 'imported',
+                            type: 'imported-module',
                             target: `${packageName}::${matched.original}`,
                         })
                         return
@@ -598,10 +627,21 @@ export class MoveParser extends EmbeddedActionsParser {
                         this.CONSUME(OpenCurly)
                         this.MANY(() => {
                             const matched = this.SUBRULE1(this.parseAsIfExists)
-                            context.registerResource(matched.alias ?? matched.original, {
-                                type: 'imported',
-                                target: `${packageName}::${moduleName}::${matched.original}`,
-                            })
+
+                            // noinspection DuplicatedCode
+                            if (matched.original === 'Self') {
+                                // register as module
+                                context.registerResource(matched.alias ?? moduleName, {
+                                    type: 'imported-module',
+                                    target: `${packageName}::${moduleName}`,
+                                })
+                            }
+                            else {
+                                context.registerResource(matched.alias ?? matched.original, {
+                                    type: 'imported',
+                                    target: `${packageName}::${moduleName}::${matched.original}`,
+                                })
+                            }
 
                             if (this.LA(1).tokenType === Comma) {
                                 this.SKIP_TOKEN()
@@ -613,10 +653,20 @@ export class MoveParser extends EmbeddedActionsParser {
 
                     // single resource
                     matched = this.SUBRULE2(this.parseAsIfExists)
-                    context.registerResource(matched.alias ?? matched.original, {
-                        type: 'imported',
-                        target: `${packageName}::${moduleName}::${matched.original}`,
-                    })
+
+                    if (matched.original === 'Self') {
+                        // register as module
+                        context.registerResource(matched.alias ?? moduleName, {
+                            type: 'imported-module',
+                            target: `${packageName}::${moduleName}`,
+                        })
+                    }
+                    else {
+                        context.registerResource(matched.alias ?? matched.original, {
+                            type: 'imported',
+                            target: `${packageName}::${moduleName}::${matched.original}`,
+                        })
+                    }
                 },
             },
             {
@@ -662,10 +712,20 @@ export class MoveParser extends EmbeddedActionsParser {
                             // single resource
                             const matched = this.SUBRULE4(this.parseAsIfExists)
 
-                            context.registerResource(matched.alias ?? matched.original, {
-                                type: 'imported',
-                                target: `${packageName}::${moduleName}::${matched.original}`,
-                            })
+                            // noinspection DuplicatedCode
+                            if (matched.original === 'Self') {
+                                // register as module
+                                context.registerResource(matched.alias ?? moduleName, {
+                                    type: 'imported-module',
+                                    target: `${packageName}::${moduleName}`,
+                                })
+                            }
+                            else {
+                                context.registerResource(matched.alias ?? matched.original, {
+                                    type: 'imported',
+                                    target: `${packageName}::${moduleName}::${matched.original}`,
+                                })
+                            }
 
                             if (this.LA(1).tokenType === Comma) {
                                 this.SKIP_TOKEN()
@@ -768,7 +828,7 @@ export class MoveParser extends EmbeddedActionsParser {
                                 this.CONSUME(Equal)
                                 this.OR1([{
                                     ALT: () => {
-                                        attributes[profile] = this.CONSUME(LiteralString).image
+                                        attributes[profile] = this.CONSUME(LiteralString).image.slice(1, -1)
                                     },
 
                                 }, {
@@ -898,6 +958,12 @@ export class MoveParser extends EmbeddedActionsParser {
                         this.SUBRULE(this.parseMoveAttribute, { ARGS: [context_] })
                     },
                 },
+                // 容错，丢掉不认识的字符
+                // {
+                //     ALT: () => {
+                //         this.SKIP_TOKEN()
+                //     }
+                // }
             ])
         })
     })
