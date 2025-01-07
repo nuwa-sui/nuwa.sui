@@ -1,4 +1,4 @@
-import { MoveParser } from '@'
+import { MoveParser2024 } from '@'
 import { Context } from '@/context'
 import { beforeAll, beforeEach } from 'vitest'
 
@@ -7,7 +7,7 @@ beforeAll(() => {
 })
 
 beforeEach((ctx) => {
-    ctx.parser = new MoveParser()
+    ctx.parser = new MoveParser2024()
     ctx.astContext = new Context({
         name: 'test',
         environment: 'module',
@@ -18,7 +18,7 @@ beforeEach((ctx) => {
 
 declare module 'vitest' {
     export interface TestContext {
-        parser: MoveParser
+        parser: MoveParser2024
         astContext: Context
     }
 }

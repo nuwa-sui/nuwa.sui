@@ -10,6 +10,13 @@
             "type": "MIT"
         }
     ],
+    "keywords": [
+        "sui",
+        "ast",
+        "move",
+        "web3",
+        "blockchain"
+    ],
     "exports": {
         ".": {
             "import": {

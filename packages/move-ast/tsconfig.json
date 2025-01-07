@@ -1,33 +1,11 @@
 {
+    "extends": "../../tsconfig.shared.json",
     "compilerOptions": {
-        "target": "ESNext",
-        "jsx": "react-jsx",
-        // Enable latest features
-        "lib": [
-            "ESNext"
-        ],
-        "moduleDetection": "force",
-        "module": "ESNext",
-        // Bundler mode
-        "moduleResolution": "bundler",
-
+        "types": ["vitest/globals"],
         "paths": {
             "@": ["./src/index.ts"],
-            "@/*": ["./src/*"]
-        },
-        "types": ["vitest/globals"],
-        "allowImportingTsExtensions": true,
-        "allowJs": true,
-        // Best practices
-        "strict": true,
-        "noFallthroughCasesInSwitch": true,
-        "noPropertyAccessFromIndexSignature": false,
-        // Some stricter flags (disabled by default)
-        "noUnusedLocals": false,
-        "noUnusedParameters": false,
-        "noEmit": true,
-        "verbatimModuleSyntax": true,
-        "skipLibCheck": true
+            "@/*": ["./src/*"],
+        }
     },
     "include": [
         "src/**/*.ts",

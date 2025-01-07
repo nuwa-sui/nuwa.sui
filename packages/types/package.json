@@ -1,12 +1,17 @@
 {
     "name": "@nuwa.sui/types",
     "type": "module",
+    "private": false,
     "module": "index.ts",
     "types": "index.ts",
+    "files": [
+        "**/**.ts"
+    ],
     "peerDependencies": {
         "typescript": "^5.0.0"
     },
     "devDependencies": {
-        "@types/bun": "latest"
+        "@mysten/bcs": "^1.2.0",
+        "@mysten/sui": "^1.17.0"
     }
 }

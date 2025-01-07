@@ -1,5 +1,5 @@
 import type { Storage } from 'unstorage'
-import { MoveParser, tokenizeMove } from '@'
+import { MoveParser2024, tokenizeMove } from '@'
 import { createStorage } from 'unstorage'
 import githubDriver from 'unstorage/drivers/github'
 import { expect } from 'vitest'
@@ -89,7 +89,7 @@ it.concurrent.each<[Storage<string>, string, string]>([
 ])('should parse std-lib success', async (storage, key, name) => {
     consola.info('fetch: ', name, ' - ', key)
     const sourceCode = (await storage.get(key)) as string
-    const parser = new MoveParser(tokenizeMove(sourceCode))
+    const parser = new MoveParser2024(tokenizeMove(sourceCode))
     const module = parser.parseModule()
     expect(module).toMatchObject({})
     expect(parser.errors.length, JSON.stringify(parser.errors)).toBe(0)

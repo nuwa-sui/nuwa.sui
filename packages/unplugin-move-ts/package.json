@@ -1,0 +1,24 @@
+{
+    "name": "@nuwa.sui/unplugin-move-ts",
+    "version": "1.0.0-alpha",
+    "private": "false",
+    "keywords": [
+        "sui",
+        "move",
+        "web3",
+        "typescript",
+        "unplugin",
+        "blockchain",
+        "vite"
+    ],
+    "author": "majoson-chen <majoson1688@icloud.com>",
+    "license": "MIT",
+    "scripts": {},
+    "dependencies": {
+        "tsup": "^8.3.5",
+        "unplugin": "^2.1.0"
+    },
+    "devDependencies": {
+        "@rollup/pluginutils": "^5.1.3"
+    }
+}

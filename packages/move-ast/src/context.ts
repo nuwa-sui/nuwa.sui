@@ -1,12 +1,13 @@
+import type { MoveEnumResType, MovePrimitiveType, MoveStructResType } from '@nuwa.sui/types/MoveABITypes.ts'
 import type {
     ContextEnvironment,
+    MoveABI,
     MoveAttributeType,
     MoveFunctionType,
     MoveResourceType,
-    ParsedModule,
 } from './types.ts'
 
-const PrimitiveTypes = ['u8', 'u16', 'u32', 'u64', 'u128', 'u256', 'bool', 'address', 'vector']
+const PrimitiveTypes: MovePrimitiveType[] = ['u8', 'u16', 'u32', 'u64', 'u128', 'u256', 'bool', 'address']
 
 // https://docs.sui.io/guides/developer/advanced/move-2024-migration#nested-use-and-standard-library-defaults
 const AutoImported: {
@@ -53,6 +54,14 @@ const AutoImported: {
         type: 'imported',
         target: 'sui::tx_context::TxContext',
     },
+    Random: {
+        type: 'imported',
+        target: 'sui::random::Random',
+    },
+    Clock: {
+        type: 'imported',
+        target: 'sui::clock::Clock',
+    },
 }
 
 /*
@@ -64,9 +73,9 @@ export class Context {
         [key: string]: MoveResourceType
     }
 
-    readonly functions: ParsedModule['functions']
+    readonly functions: MoveABI['functions']
     readonly builtInResources: {
-        [key: string]: MoveResourceType
+        [key: string]: MoveStructResType | MoveEnumResType
     }
 
     private unCostAttributes: MoveAttributeType
@@ -146,7 +155,7 @@ export class Context {
     }
 
     // 注册模块内的资源，例如定义的 struct，enum, 会同时注册到 resources 和 builtInResources 中
-    public registerBuiltInResource(name: string, resource: MoveResourceType): void {
+    public registerBuiltInResource(name: string, resource: MoveStructResType | MoveEnumResType): void {
         this.builtInResources[name] = resource
         this.resources[name] = resource
 

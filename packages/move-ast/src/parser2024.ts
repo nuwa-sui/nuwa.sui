@@ -1,5 +1,7 @@
+import type { MoveEnumResType, MoveStructResType } from '@nuwa.sui/types/MoveABITypes.ts'
 import type {
     AsAlias,
+    MoveABI,
     MoveAbilitiesType,
     MoveAttributeType,
     MoveBorrowType,
@@ -9,7 +11,6 @@ import type {
     MoveResourceRefType,
     MoveResourceType,
     MoveStructFieldsType,
-    ParsedModule,
 } from './types'
 import { EmbeddedActionsParser, type IToken } from 'chevrotain'
 import { Context } from './context'
@@ -52,7 +53,7 @@ import {
     Use,
 } from './tokens'
 
-export class MoveParser extends EmbeddedActionsParser {
+export class MoveParser2024 extends EmbeddedActionsParser {
     // 解析变量声明 let, const，目前跳过，不解析
     parseVarDeclaration = this.RULE('parseVarDeclaration', (): null => {
         this.OR([{
@@ -291,7 +292,7 @@ export class MoveParser extends EmbeddedActionsParser {
         return fields
     })
 
-    parseStruct = this.RULE('parseStruct', (context: Context): [string, MoveResourceType] => {
+    parseStruct = this.RULE('parseStruct', (context: Context): [string, MoveStructResType] => {
         !context && (context = new Context())
 
         let isPublic = false
@@ -375,7 +376,7 @@ export class MoveParser extends EmbeddedActionsParser {
         return [structName, struct]
     })
 
-    parseEnum = this.RULE('parseEnum', (context: Context): [string, MoveResourceType] => {
+    parseEnum = this.RULE('parseEnum', (context: Context): [string, MoveEnumResType] => {
         /*
         * public enum DEF {
         *   Tuple(u64, u64),
@@ -738,6 +739,7 @@ export class MoveParser extends EmbeddedActionsParser {
                         this.MANY(() => {
                             const matched = this.SUBRULE5(this.parseAsIfExists)
 
+                            // noinspection DuplicatedCode
                             if (matched.original === 'Self') {
                                 // register as module
                                 context.registerResource(matched.alias ?? moduleName, {
@@ -888,7 +890,7 @@ export class MoveParser extends EmbeddedActionsParser {
 
     parseModuleBody = this.RULE('parseModuleBody', (context_: Context) => {
         // uses
-        // consts
+        // const's
         // resources
         // functions
         !context_ && (context_ = new Context())
@@ -969,11 +971,11 @@ export class MoveParser extends EmbeddedActionsParser {
     })
 
     // 解析模块, 返回 ParsedModule
-    parseModule = this.RULE('parseModule', (): ParsedModule => {
+    parseModule = this.RULE('parseModule', (): MoveABI => {
         // module package::module {}?;
         // module package::module; ...
 
-        const parsedModule: ParsedModule = {
+        const parsedModule: MoveABI = {
             packageName: 'Unknown',
             moduleName: 'Unknown',
             test: false,
@@ -1027,7 +1029,7 @@ export class MoveParser extends EmbeddedActionsParser {
         parsedModule.resources = context.builtInResources
         parsedModule.functions = context.functions
 
-        MoveParser.fixResourceReference(parsedModule, context)
+        MoveParser2024.fixResourceReference(parsedModule, context)
         return parsedModule
     })
 
@@ -1038,7 +1040,7 @@ export class MoveParser extends EmbeddedActionsParser {
     }
 
     // 检查是否有指向 unknown 的资源引用，尝试在 builtInResources 中查找
-    static fixResourceReference(parsed: ParsedModule, context: Context): void {
+    static fixResourceReference(parsed: MoveABI, context: Context): void {
         // 1. 遍历 resources 下所有 item 中的 fields 中 item 的 ref
         // 2. 遍历 functions 下所有 item 中的 params 和 returns
         function fix(resource: MoveResourceType, rePlace: (_: MoveResourceType) => void): void {

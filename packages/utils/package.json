@@ -1,0 +1,15 @@
+{
+    "name": "@nuwa.sui/utils",
+    "version": "1.0.0-alpha",
+    "description": "",
+    "private": true,
+    "license": "MIT",
+    "main": "index.ts",
+    "types": "index.ts",
+    "files": ["**/*.ts"],
+    "scripts": {},
+    "dependencies": {
+        "@mysten/sui": "^1.17.0",
+        "@nuwa.sui/types": "workspace:*"
+    }
+}

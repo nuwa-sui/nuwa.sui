@@ -1,7 +1,7 @@
 import {MoveLexer} from "./tokens";
-import {MoveParser} from './parser'
+import {MoveParser2024} from './parser2024'
 
-export {MoveLexer, MoveParser}
+export {MoveLexer, MoveParser2024}
 
 const source_ = `
     /// top level comment
@@ -43,7 +43,7 @@ const tokens = MoveLexer.tokenize(file).tokens
 // process.exit(0)
 
 
-const parser = new MoveParser(tokens)
+const parser = new MoveParser2024(tokens)
 
 const result = parser.parseModule()
 parser.errors.length && console.log(parser.errors)

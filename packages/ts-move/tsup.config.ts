@@ -1,9 +1,9 @@
 import { defineConfig } from 'tsup'
-import AutoImport from 'unplugin-auto-import/esbuild'
-import { AutoImportOptions } from './autoImport.ts'
+// import AutoImport from 'unplugin-auto-import/esbuild'
+// import { AutoImportOptions } from './autoImport.ts'
 
 export default defineConfig({
-    name: 'move-ast',
+    name: 'move-ts',
     entry: ['src/index.ts'],
     target: ['node20'],
     format: ['esm', 'cjs'],
@@ -11,5 +11,5 @@ export default defineConfig({
     keepNames: true,
     outDir: 'dist',
     treeshake: true,
-    esbuildPlugins: [AutoImport(AutoImportOptions)],
+    // esbuildPlugins: [AutoImport(AutoImportOptions)],
 })

@@ -1,0 +1,21 @@
+{
+    "name": "@nuwa.sui/ts-move",
+    "version": "1.0.0-alpha",
+    "description": "",
+    "keywords": [
+        "sui",
+        "move",
+        "typescript",
+        "web3",
+        "blockchain"
+    ],
+    "author": "majoson-chen <majoson1688@icloud.com>",
+    "license": "MIT",
+    "scripts": {},
+    "dependencies": {
+        "@mysten/sui": "^1.17.0",
+        "@nuwa.sui/types": "workspace:*",
+        "@nuwa.sui/utils": "workspace:*",
+        "tsup": "^8.3.5"
+    }
+}

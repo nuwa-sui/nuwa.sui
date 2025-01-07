@@ -1,7 +1,9 @@
 import type { IToken } from 'chevrotain'
 import { MoveLexer } from './tokens'
 
-export { MoveParser } from './parser'
+export { MoveParser2024 } from './parser2024'
+
+export type { MoveABI } from './types'
 
 export function tokenizeMove(source: string, strict: boolean = false): IToken[] {
     const rst = MoveLexer.tokenize(source)
