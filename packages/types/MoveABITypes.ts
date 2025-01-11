@@ -1,9 +1,15 @@
+/*
+* @author: majoson
+* 此文件用于将 Move ABI 映射到 TypeScript 类型，实现极为复杂，修改需要谨慎
+* */
 import type { EnumInputShape, EnumOutputShape } from '@mysten/bcs'
 import type { bcs, BcsType } from '@mysten/sui/bcs'
-import type { TransactionResult } from '@mysten/sui/transactions'
-import type { SuiAddress, SuiIdentifier } from './LiteralTypes.ts'
+import type { TransactionResult as TransactionResult_ } from '@mysten/sui/transactions'
+import type { SuiAddress } from './LiteralTypes.ts'
 
 type BCS = typeof bcs
+// fix nested result
+type TransactionResult = TransactionResult_ | { $kind: 'NestedResult', NestedResult: [number, number] }
 
 export type MoveAbilitiesType = 'key' | 'store' | 'copy' | 'drop'
 
@@ -66,15 +72,15 @@ export interface MoveImportedResType {
     target: string // u8, std::vec::Vec, T, etc.
 }
 
-export interface MoveOptionalResType {
-    type: 'imported'
-    target: 'std::option::Option'
-}
-
-export interface MoveStringResType {
-    type: 'imported'
-    target: 'std::ascii::String' | 'std::string::String'
-}
+// export interface MoveOptionalResType extends MoveImportedResType {
+//     type: 'imported'
+//     target: 'std::option::Option'
+// }
+//
+// export interface MoveStringResType extends MoveImportedResType {
+//     type: 'imported'
+//     target: 'std::ascii::String' | 'std::string::String'
+// }
 
 export type MoveResourceType =
     MoveImportedResType
@@ -83,8 +89,8 @@ export type MoveResourceType =
     | MoveEnumResType
     | MoveGenericResType
     | MoveVariableResType
-    | MoveOptionalResType
-    | MoveStringResType
+// | MoveOptionalResType
+// | MoveStringResType
 
 export interface MoveStructFieldsType {
     [key: string]: MoveResourceRefType
@@ -134,7 +140,7 @@ export interface MoveABI {
 
 export type MovePrimitiveType = `u${8 | 16 | 32 | 64 | 128 | 256}` | 'bool' | 'address'
 
-export type MapMovePrimitiveToBcsType<T extends MovePrimitiveType> =
+export type MapMovePrimitiveToBcsType<Res extends MovePrimitiveResType, T = Res['target']> =
     T extends 'u8' ? BCS['U8'] :
         T extends 'u16' ? BCS['U16'] :
             T extends 'u32' ? BCS['U32'] :
@@ -145,86 +151,108 @@ export type MapMovePrimitiveToBcsType<T extends MovePrimitiveType> =
                                 T extends 'address' ? BCS['Address'] :
                                     never
 
-export type MapMoveResToBcsType<Res extends MoveResourceType> = Res extends MoveImportedResType ? BcsType<any, any> :
-    Res extends MovePrimitiveResType ? MapMovePrimitiveToBcsType<Res['target']> :
-        Res extends MoveStructResType ?
-            // struct
-            BcsType<{
-                [key in keyof Res['fields']]: MapMoveResToBcsType<Res['fields'][key]['resource']> extends BcsType<infer U, any> ? U : never
-            }, {
-                    [key in keyof Res['fields']]: MapMoveResToBcsType<Res['fields'][key]['resource']> extends BcsType<any, infer U> ? U : never
-                }> :
-            Res extends MoveEnumResType ?
-                // enum
-                // @TODO: 好像少了一层 BcsType
-                BcsType<
-                    EnumOutputShape<{
-                        [Field in keyof Res['fields']]:
-                        // single
-                        Res['fields'][Field] extends MoveEnumSingleFieldType ? true :
-                            // struct
-                            Res['fields'][Field] extends MoveEnumStructFieldType ? {
-                                [SubField in keyof Res['fields'][Field]['fields']]: MapMoveResToBcsType<Res['fields'][Field]['fields'][SubField]['resource']> extends BcsType<infer U, any> ? U : never
-                            }
-                                // tuple
-                                : Res['fields'][Field] extends MoveEnumTupleFieldType ?
-                                        {
-                                            -readonly [index in keyof Res['fields'][Field]['fields'] as index extends number ? index : never]: index extends number ? MapMoveResToBcsType<Res['fields'][Field]['fields'][index]['resource']> extends BcsType<infer U, any> ? U : never : never
-                                        }
-                                    : never
-                    }>,
-                    EnumInputShape<{
-                        [Field in keyof Res['fields']]:
-                        // single
-                        Res['fields'][Field] extends MoveEnumSingleFieldType ? true :
-                            // struct
-                            Res['fields'][Field] extends MoveEnumStructFieldType ? {
-                                [SubField in keyof Res['fields'][Field]['fields']]: MapMoveResToBcsType<Res['fields'][Field]['fields'][SubField]['resource']> extends BcsType<any, infer U> ? U : never
-                            }
-                                // tuple
-                                : Res['fields'][Field] extends MoveEnumTupleFieldType ?
-                                        {
-                                            [index in keyof Res['fields'][Field]['fields'] as index extends number ? index : never]: index extends number ? MapMoveResToBcsType<Res['fields'][Field]['fields'][index]['resource']> extends BcsType<any, infer U> ? U : never : never
-                                        }
-                                    : never
-                    }>
-                >
-                : never
+export type MapMoveMoveStructToBcsType<Res extends MoveStructResType> = BcsType<
+    {
+        [key in keyof Res['fields']]: MapMoveResToBcsType<Res['fields'][key]['resource']> extends BcsType<infer U, any> ? U : never
+    },
+    {
+        [key in keyof Res['fields']]: MapMoveResToBcsType<Res['fields'][key]['resource']> extends BcsType<any, infer U> ? U : never
+    }
+>
 
-export type MapMovePrimitiveToTsType<T extends MovePrimitiveType> = T extends 'u8' | 'u16' | 'u32' ? number | bigint | string :
-    T extends 'u64' | 'u128' | 'u256' ? bigint | string :
-        T extends 'bool' ? boolean :
-            T extends 'address' ? SuiAddress :
-                never
+type MapMoveTupleEnumFieldsToBcsType<Fields extends MoveEnumTupleFieldType['fields'], Input extends boolean = true> = {
+    [Field in keyof Fields]: Input extends true ?
+            (MapMoveResToBcsType<Fields[Field]['resource']> extends BcsType<any, infer U> ? U : never) :
+            (MapMoveResToBcsType<Fields[Field]['resource']> extends BcsType<infer U, any> ? U : never)
+}
+
+export type MapMoveEnumToBcsType<Res extends MoveEnumResType> = BcsType<
+    EnumOutputShape<{
+        [Field in keyof Res['fields']]:
+        // single
+        Res['fields'][Field] extends MoveEnumSingleFieldType ? true :
+            // struct
+            Res['fields'][Field] extends MoveEnumStructFieldType ? {
+                [SubField in keyof Res['fields'][Field]['fields']]: MapMoveResToBcsType<Res['fields'][Field]['fields'][SubField]['resource']> extends BcsType<infer U, any> ? U : never
+            } :
+                // tuple
+                Res['fields'][Field] extends MoveEnumTupleFieldType ?
+                    MapMoveTupleEnumFieldsToBcsType<Res['fields'][Field]['fields'], false>
+                    : never
+    }>,
+    EnumInputShape<{
+        [Field in keyof Res['fields']]:
+        // single
+        Res['fields'][Field] extends MoveEnumSingleFieldType ? boolean :
+            // struct
+            Res['fields'][Field] extends MoveEnumStructFieldType ? {
+                [SubField in keyof Res['fields'][Field]['fields']]: MapMoveResToBcsType<Res['fields'][Field]['fields'][SubField]['resource']> extends BcsType<any, infer U> ? U : never
+            } :
+                // tuple
+                Res['fields'][Field] extends MoveEnumTupleFieldType ?
+                    MapMoveTupleEnumFieldsToBcsType<Res['fields'][Field]['fields'], true>
+                    : never
+    }>
+>
+
+// 将 resources 映射到 BcsType
+export type MapMoveResToBcsType<Res extends MoveResourceType> = Res extends MoveImportedResType ? BcsType<any, any> :
+    Res extends MovePrimitiveResType ? MapMovePrimitiveToBcsType<Res> :
+        Res extends MoveStructResType ? MapMoveMoveStructToBcsType<Res> :
+            Res extends MoveEnumResType ? MapMoveEnumToBcsType<Res> : never
+
+// export type MapMovePrimitiveToTsType<T extends MovePrimitiveType> = T extends 'u8' | 'u16' | 'u32' ? number | bigint | string :
+//     T extends 'u64' | 'u128' | 'u256' ? bigint | string :
+//         T extends 'bool' ? boolean :
+//             T extends 'address' ? SuiAddress :
+//                 never
 
 type Includes<T extends readonly any[], U> = T extends [infer First, ...infer Rest]
     ? (First extends U ? true : Includes<Rest, U>)
     : false
 
-export type MapMoveFunToTs<Functions extends ABIFunctions, funName extends keyof Functions> = (params: {
-    [paramName in keyof Functions[funName]['params'] as Functions[funName]['params'][paramName]['resource'] extends MoveOptionalResType ? never : paramName]: MapMoveFunArgToTs<Functions[funName]['params'][paramName]['resource']>
-} & {
-    [paramName in keyof Functions[funName]['params'] as Functions[funName]['params'][paramName]['resource'] extends MoveOptionalResType ? paramName : never]+?: MapMoveFunArgToTs<Functions[funName]['params'][paramName]['resource']>
-} & {
-    [genericIndex in keyof Functions[funName]['generics'] as genericIndex extends number ? `$${Functions[funName]['generics'][genericIndex]['name']}` : never]: SuiIdentifier
-}) => TransactionResult
+export type MapMovePrimitiveToArgInput<Arg extends MovePrimitiveResType> = MapMovePrimitiveToBcsType<Arg> extends BcsType<infer U, any> ? U : never
+export type MapMoveStructToArgInput<Ref extends MoveResourceRefType, Arg = Ref['resource']> = Arg extends MoveStructResType ?
+    // unique obj, can be undefined; key object, can pass by SuiAddress
+    (Arg['unique'] extends true ? undefined | SuiAddress : Includes<Arg['abilities'], 'key'> extends true ? SuiAddress : never) | TransactionResult : never
+export type MapMoveImportedToArgInput<Ref extends MoveResourceRefType, Arg = Ref['resource']> = Arg extends MoveImportedResType ?
+        (
+        // tx_context
+            Arg['target'] extends 'sui::tx_context::TxContext' | 'sui::clock::Clock' | 'sui::random::Random' ? undefined :
+            // option
+                Arg['target'] extends 'std::option::Option' ? undefined | TransactionResult | MapMoveFunArgToInput<Ref['generics'][0]> :
+                    Arg['target'] extends 'std::vector' ? (
+                    // vector
+                    Ref['generics'][0]['resource'] extends MovePrimitiveResType ? (
+                        Ref['generics'][0]['resource']['target'] extends 'u8' ? string | Uint8Array : MapMoveFunArgToInput<Ref['generics'][0]>[]) : MapMoveFunArgToInput<Ref['generics'][0]>[]
+                    ) | TransactionResult : MapMoveFunArgToInput<Ref['generics'][0]>[]
+        )
+    : never
 
-export type MapMoveFunArgToTs<Arg extends MoveResourceType> =
+// 将单个参数映射为 moveCall 中的输入类型
+export type MapMoveFunArgToInput<Ref extends MoveResourceRefType, Arg = Ref['resource']> =
     Arg extends MovePrimitiveResType ?
-        MapMovePrimitiveToTsType<Arg['target']> | TransactionResult
-        : Arg extends MoveStructResType ?
-            Includes<Arg['abilities'], 'key'> extends true ? SuiAddress | TransactionResult
-                : TransactionResult
-            : Arg extends MoveOptionalResType ?
-                undefined | string | TransactionResult
-                : Arg extends MoveStringResType ? string | TransactionResult
-                    : TransactionResult
+        MapMovePrimitiveToArgInput<Arg> :
+        Arg extends MoveStructResType ?
+            MapMoveStructToArgInput<Ref> :
+            Arg extends MoveImportedResType ?
+                MapMoveImportedToArgInput<Ref> :
+                never
 
-// export type MapMoveFunToTs<Functions extends ABIFunctions, funName extends keyof Functions> = (params: {
-//     [paramName in keyof Functions[funName]['params']]: (
-//         Functions[funName]['params'][paramName]['resource'] extends MovePrimitiveResType ?
-//                 MapMovePrimitiveToTsType<Functions[funName]['params'][paramName]['resource']['target']> | TransactionResult
-//             : Functions[funName]['params'][paramName]['resource'] extends MoveStructResType ?
-//                 Includes<Functions[funName]['params'][paramName]['resource']['abilities'], 'key'> extends true ? SuiAddress | TransactionResult : TransactionResult : TransactionResult
-//     )
-// }) => TransactionResult
+export type MapMoveFunToTs<Functions extends ABIFunctions, FunName extends keyof Functions> = (
+    params: {
+        // required params
+        [paramName in keyof Functions[FunName]['params'] as Functions[FunName]['params'][paramName]['resource'] extends MoveImportedResType ? (
+            Functions[FunName]['params'][paramName]['resource']['target'] extends 'std::option::Option' | 'sui::tx_context::TxContext' ? never : paramName
+        ) : Functions[FunName]['params'][paramName]['resource'] extends MoveStructResType ? (
+            Functions[FunName]['params'][paramName]['resource']['unique'] extends true ? never : paramName
+        ) : paramName]: MapMoveFunArgToInput<Functions[FunName]['params'][paramName]>
+    } & {
+        // optional params, unique-obj, tx_context, option
+        [paramName in keyof Functions[FunName]['params'] as Functions[FunName]['params'][paramName]['resource'] extends MoveImportedResType ? (
+            Functions[FunName]['params'][paramName]['resource']['target'] extends 'std::option::Option' | 'sui::tx_context::TxContext' ? paramName : never
+        ) : Functions[FunName]['params'][paramName]['resource'] extends MoveStructResType ? (
+            Functions[FunName]['params'][paramName]['resource']['unique'] extends true ? paramName : never
+        ) : never]+?: MapMoveFunArgToInput<Functions[FunName]['params'][paramName]> | undefined
+    }
+) => TransactionResult_

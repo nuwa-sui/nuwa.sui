@@ -102,6 +102,19 @@ interface ABI extends MoveABI {
                         }
                     }]
                 }
+                C: {
+                    type: 'struct'
+                    fields: {
+                        n: {
+                            ref: 'value'
+                            resource: {
+                                type: 'primitive'
+                                target: 'u8'
+                            }
+                            generics: []
+                        }
+                    }
+                }
             }
         }
     }
@@ -120,7 +133,7 @@ interface ABI extends MoveABI {
                     ref: 'mut_borrow'
                     generics: []
                     resource: {
-                        type: 'optional'
+                        type: 'imported'
                         target: 'sui::tx_context::TxContext'
                     }
                 }
@@ -133,6 +146,36 @@ interface ABI extends MoveABI {
             }]
             modifiers: []
             returns: []
+        }
+        burn: {
+            target: ''
+            generics: []
+            modifiers: []
+            returns: []
+            params: {
+                obj: {
+                    ref: 'value'
+                    generics: []
+                    resource: {
+                        type: 'struct'
+                        target: 'Obj'
+                        unique: true
+                        public: true
+                        generics: []
+                        abilities: []
+                        fields: {
+                            a: {
+                                ref: 'value'
+                                resource: {
+                                    type: 'primitive'
+                                    target: 'u8'
+                                }
+                                generics: []
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -188,6 +231,19 @@ const abi: ABI = {
                         },
                     }],
                 },
+                C: {
+                    type: 'struct',
+                    fields: {
+                        n: {
+                            ref: 'value',
+                            resource: {
+                                type: 'primitive',
+                                target: 'u8',
+                            },
+                            generics: [],
+                        },
+                    },
+                },
             },
         },
     },
@@ -206,7 +262,7 @@ const abi: ABI = {
                     ref: 'mut_borrow',
                     generics: [],
                     resource: {
-                        type: 'optional',
+                        type: 'imported',
                         target: 'sui::tx_context::TxContext',
                     },
                 },
@@ -220,6 +276,36 @@ const abi: ABI = {
             modifiers: [],
             returns: [],
         },
+        burn: {
+            target: '',
+            generics: [],
+            modifiers: [],
+            returns: [],
+            params: {
+                obj: {
+                    ref: 'value',
+                    generics: [],
+                    resource: {
+                        type: 'struct',
+                        target: 'Obj',
+                        unique: true,
+                        public: true,
+                        generics: [],
+                        abilities: [],
+                        fields: {
+                            a: {
+                                ref: 'value',
+                                resource: {
+                                    type: 'primitive',
+                                    target: 'u8',
+                                },
+                                generics: [],
+                            },
+                        },
+                    },
+                },
+            },
+        },
     },
 }
 
@@ -230,9 +316,10 @@ const contract = new Contract({
 
 const tx = {} as Transaction
 contract.useFun(tx).mint({
-    to: '0x1',
-    $T: '0x2',
+
 })
+
+contract.res.Def.fromBase64()
 // const [a1, b2] = contract.res.Def.parse().B!
 
 export function useContract(): void {

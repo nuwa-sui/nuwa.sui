@@ -1,7 +1,7 @@
 import { tokenizeMove } from '@'
 
 it('should normal function be parsed', ({ parser, astContext }) => {
-    parser.input = tokenizeMove(`public(package) entry fun test<T: key + store>(value: &mut T): T {}`)
+    parser.input = tokenizeMove(`public(package) entry fun test<T: key + store>(value: &mut T, key: vector<Option<u8>>): T {}`)
     const [name, func] = parser.parseFunction(astContext)!
     expect(name).toBe('test')
     expect(func).toMatchObject({

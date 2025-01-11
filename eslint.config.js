@@ -14,6 +14,6 @@ export default antfu({
         '**/**.temp.*s',
     ],
     rules: {
-    
+        'eslint-comments/no-unlimited-disable': 'off',
     },
 })
