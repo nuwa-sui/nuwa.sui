@@ -3,3 +3,5 @@ export type VectorPrimitiveType = `vector<${PrimitiveMoveType}>`
 
 export type NonPureParamType = 'object' | 'receiving-object' | 'enum'
 export type VectorContextParamType = `vector<${NonPureParamType}>`
+
+export * from './LiteralTypes'

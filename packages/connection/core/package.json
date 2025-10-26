@@ -1,0 +1,14 @@
+{
+    "name": "@nuwa.sui/connection-core",
+    "type": "module",
+    "peerDependencies": {
+        "@mysten/sui": "^1.17.0",
+        "typescript": "^5"
+    },
+    "devDependencies": {
+        "@nuwa.sui/types": "workspace:*"
+    },
+    "dependencies": {
+        "@mysten/wallet-standard": "^0.15.2"
+    }
+}

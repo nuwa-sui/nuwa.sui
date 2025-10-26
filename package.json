@@ -1,5 +1,5 @@
 {
-    "name": "nuwa.sui",
+    "name": "@nuwa.sui/monorepo",
     "type": "module",
     "private": true,
     "workspaces": [
@@ -7,6 +7,9 @@
     ],
     "scripts": {
         "lint:fix": "eslint --fix ."
+    },
+    "peerDependencies": {
+        "typescript": "^5"
     },
     "devDependencies": {
         "@antfu/eslint-config": "^3.10.0",
